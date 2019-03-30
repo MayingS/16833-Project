@@ -10,6 +10,7 @@ class DPFDataset(data.Dataset):
         self.filename = filename
         states, observations, actions = make_dataset(filename)
         self.dataset = [(sta, obs, act) for sta, obs, act in zip(states, observations, actions)]
+        print(self.dataset[0][0].shape, self.dataset[0][1].shape, self.dataset[0][2].shape)
 
     def __getitem__(self, index):
         return self.dataset[index]
@@ -27,6 +28,47 @@ def wrap_angle(angle):
       angle value in range [-pi, pi)
     """
     return ((angle - np.pi) % (2 * np.pi)) - np.pi
+
+
+def act_add_noise(data, noise_factor=1.0):
+    """ Add noise to the odometry data
+
+    Args:
+      data: action data in numpy array with size (N, T-1, 3)
+      noise_factor: the factor to control the noise to be added
+    Returns:
+      new_data: action data after adding noises, in numpy array with size (N, T-1, 3)
+    """
+    noises = np.random.normal(1.0, 0.1 * noise_factor, data.shape)
+    new_data = data * noises
+
+    return new_data
+
+
+def obs_add_noise(data, noise_factor=1.0, random_shift=True):
+    """ Add noise to the observation data
+
+    Args:
+      data: observation data in numpy array with size (N, T-1, H, W, 3)
+      noise_factor: the factor to control the noise to be added
+      random_shift: indicate whether to shift randomly or not
+    Returns:
+      new_data: observation data after cropping and adding noises,
+                in numpy array with size (N, T-1, 24, 24, 3)
+    """
+    N, T, _, _, _ = data.shape
+    new_data = np.zeros((N, T, 24, 24, 3))
+    for i in range(N):
+        for j in range(T):
+            if random_shift:
+                offsets = np.random.randint(0, 8, 2)
+            else:
+                offsets = [4, 4]
+            new_data[i, j] = data[i, j, offsets[0]:offsets[0]+24, offsets[1]:offsets[1]+24, :]
+    noises = np.random.normal(0.0, 20 * noise_factor, new_data.shape)
+    new_data += noises
+
+    return new_data
 
 
 def make_dataset(filename):
@@ -69,7 +111,9 @@ def make_dataset(filename):
 
     states = data['pose'][:, 1:, :]
     observations = data['rgbd'][:, 1:, :, :, :3]
+    observations = obs_add_noise(observations)
     actions = np.concatenate([rel_d_x, rel_d_y, d_theta], axis=-1)
+    actions = act_add_noise(actions)
 
     return states, observations, actions
 
