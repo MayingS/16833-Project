@@ -1,7 +1,8 @@
 class Params:
     def __init__(self):
         self.globalparam = {
-            'min_obs_likelihood': 0.004
+            'min_obs_likelihood': 0.004,
+            'workers': 4
         }
         self.train = {
             'train_individually': True,
