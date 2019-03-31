@@ -11,7 +11,7 @@ class DPFDataset(data.Dataset):
         seq_length = params.train['seq_length']
         # get a sequence every 5 steps
         sta = [states[i:i+seq_length, :] for i in range(0, states.shape[0]-seq_length, 5)]
-        obs = [observations[i:i+seq_length, :, :, :] for i in range(0, observations.shape[0]-seq_length, 5)]
+        obs = [observations[i:i+seq_length, :, :, :].transpose(0, 3, 1, 2) for i in range(0, observations.shape[0]-seq_length, 5)]
         act = [actions[i:i+seq_length, :] for i in range(0, actions.shape[0]-seq_length, 5)]
         self.dataset = [(s, o, a) for s, o, a in zip(sta, obs, act)]
 
