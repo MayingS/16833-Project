@@ -35,12 +35,24 @@ class ObservationEncoder(nn.Module):
 
 
 class ParticleProposer(nn.Module):
-    def __init__(self):
+    def __init__(self, keepRatio):
         super(ParticleProposer, self).__init__()
-        pass
+        self.proposer = nn.Sequential(
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Dropout(1 - keepRatio),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 4),
+            nn.Tanh()
+        )
 
     def forward(self, x):
-        pass
+        return self.proposer(x)
 
 
 class ObservationLikelihoodEstimator(nn.Module):
