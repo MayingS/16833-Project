@@ -114,6 +114,27 @@ def make_dataset(filename):
     return states, observations, actions
 
 
+def square_distance(s_t, s, state_step_sizes):
+    """ Calcuate distances between two sets of states for particle proposer backprog
+    Args:
+      s_t: ground truth states ()
+      s: proposed states
+      state_step_size
+    Returns:
+      dist: distance between two states
+    """
+    dist = 0.0
+    for i in range(s_t.shape[-1]):
+        # compute difference
+        diff = s_t[..., i] - s[..., i]
+        # wrap angle for theta
+        if i == 2:
+            diff = wrap_angle(diff)
+        # add up scaled squared distance
+        dist += (diff / state_step_sizes[i]) ** 2
+    return dist
+
+
 if __name__ == '__main__':
     states, observations, actions = make_dataset('data/100s/nav01_train.npz')
     D = DPFDataset(states, observations, actions)

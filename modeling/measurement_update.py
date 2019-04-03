@@ -35,7 +35,7 @@ class ObservationEncoder(nn.Module):
 
 
 class ParticleProposer(nn.Module):
-    def __init__(self, keepRatio):
+    def __init__(self, keepRatio=0.3):
         super(ParticleProposer, self).__init__()
         self.proposer = nn.Sequential(
             nn.Linear(128, 128),
@@ -50,6 +50,18 @@ class ParticleProposer(nn.Module):
             nn.Linear(128, 4),
             nn.Tanh()
         )
+    
+    def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
+        """
+        Args:
+            encoding: output of observation encoder (N, 128)
+            num_particles: number of particles
+            state_mins: minimum values of states
+            state_maxs: maximum values of states
+        Returns:
+            proposed_particles: np array of new proposed states
+        """
+        pass
 
     def forward(self, x):
         return self.proposer(x)
