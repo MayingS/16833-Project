@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import modeling.state_prediction as motion
+import modeling.motion_model.motion_model as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
@@ -17,8 +17,7 @@ class DPF:
         self.means = means
         self.stds = stds
 
-        self.action_sampler = motion.ActionSampler()
-        self.dynamic_model = motion.DynamicModels()
+        self.motion_model = motion.MotionModel()
         self.observation_encoder = measurement.ObservationEncoder()
         self.particle_proposer = measurement.ParticleProposer()
         self.likelihood_estimator = measurement.ObservationLikelihoodEstimator()
@@ -31,24 +30,75 @@ class DPF:
 
     def connect_modules(self):
         """ Connect all the modules together to form the whole DPF system
-
+        
         :return:
         """
         pass
 
     def train_motion_model(self):
-        """ Train the motion model (action sampler) f.
-
+        """ Train the motion model f and g.
+        
         :return:
         """
-        pass
+        batch_size = self.trainparam['batch_size']
+        epochs = self.trainparam['epochs']
+        lr = self.trainparam['learning_rate']
+        particle_num = self.trainparam['particle_num']
+        state_step_sizes = 5
 
-    def train_dynamic_model(self):
-        """ Train the dynamic model g.
+        motion_model = self.motion_model
+        motion_model = motion_model.double()
 
-        :return:
-        """
-        pass
+        train_loader = torch.utils.data.DataLoader(
+            self.train_set,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True,
+            sampler=None)
+        val_loader = torch.utils.data.DataLoader(
+            self.eval_set,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True)
+
+        optimizer = torch.optim.Adam(motion_model.params(), lr)
+
+        niter = 0
+        prev_sta = torch.tensor[0,0,0]
+        for epoch in range(epochs):
+            motion_model.train()
+
+            for iteration, (sta, obs, act) in enumerate(train_loader):
+                # Build ground truth inputs of size (batch_size, num_particles, 3)
+                # 
+                # -actions action at current time step
+                # -particles: true state at previous time step
+                # -states: true state at current time step
+
+                actions = act.repeat(1, particle_num, 1)
+                particles = prev_sta.repeat(1, particle_num, 1)
+                states = sta.repeat(1, particle_num, 1)
+
+                # Feedforward and compute loss
+                moved_particles = motion_model(actions,
+                                               particles,
+                                               states,
+                                               self.stds,
+                                               self.means,
+                                               state_step_sizes)
+                loss = motion_model.loss
+                prev_sta = sta
+
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                niter += 1
+
+                print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
 
     def train_particle_proposer(self):
         """ Train the particle proposer k.

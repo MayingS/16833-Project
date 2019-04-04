@@ -5,18 +5,11 @@ import torch.nn as nn
 from utils.data_process import *
 
 class ActionSampler(nn.Module):
-    def __init__(self, actions, particles, std, mean, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(ActionSampler, self).__init__()
         """
-        :param actions: array of size (1,3) with motion between states
-        :param particles: array of state of individual particles
+        Model to obtain random noisy actions from current action input
         """
-        self.actions = actions
-        self.particles = particles
-
-        # Std and mean of data across time sequence
-        self.std = std
-        self.mean = mean
 
         self.layers = nn.Sequential(
             nn.Linear(6,32),
@@ -26,62 +19,54 @@ class ActionSampler(nn.Module):
             nn.Linear(32,3),
             )
 
-    def sample_noise(self):
+    def sample_noise(self, actions, particles, stds, means):
         """
         Create input for action sampler network f
+        Args:
+          actions: array of size (batch_size, 1, 3)
+          particles: array of size (batch_size, num_particles, 3)
+
+        returns:
+          sampler_input: concatenated array of size (batch_size, num_particles, 6)
+          actions_input: array of size (batch_size, num_particles, 3) containing
+                         actions propagated over all particles
         """
-        # Propagate action over particles
-        H, W = self.particles.shape[0], self.particles.shape[1]
-        actions_input = np.tile(self.actions.ravel(), (H, W, 1)) / self.std["actions"]
+        # Normalize actions
+        actions = actions / stds["actions"]
         
         # Concatenate noise array to actions
-        random_noise_input = np.random.normal(size=actions_input.shape)
-        sampler_input = np.stack([actions_input, random_noise_input], axis=-1)
+        random_noise_input = torch.rand_like(actions)
+        sampler_input = torch.cat((actions_input, random_noise_input), axis=-1)
         
         return sampler_input, actions_input
 
-    def forward(self, x):
+    def forward(self, actions, particles, stds, means):
         """
-        Feed noisy inputs x to action sampler network f
+        Feed forward actions to action sampler network f
         """
-        x = torch.from_numpy(x)
-        x = x.view(-1,6)
-        x = self.layers(x)
 
-        return x
+        sampler_input, actions_input = self.sample_noise(actions, particles, stds, means)
 
-    def get_noisy_actions(self):
-        """
-        Method to retrieve noisy actions from action sampler f
-        """
-        H, W = self.particles.shape[0], self.particles.shape[1]
+        # Reshape concatenated array and pass to newtwork
+        sampler_input = sampler_input.view(-1, 6)
+        batch_size = sampler_input.size(0)
+        delta_noise = self.layers(sampler_input)
+        # Zero-centering of output noisy actions
+        delta_noise = delta_noise - torch.mean(delta_noise)
+        # Reshape output back into original size (batch_size, num_particles, 3)
+        delta_noise = delta_noise.view(batch_size, -1, 3)
 
-        noisy_input, actions_input = self.sample_noise()
-        # Get output noise
-        out_noise = self.forward(noisy_input)
-        out_noise = out_noise.numpy()
-        out_noise = np.reshape((H, W, 3))
-        # Zero-mean output noise
-        out_noise = out_noise - np.mean(out_noise)
-        # Add noise to actions
-        noisy_actions = actions_input + out_noise
+        noisy_actions = actions_input + delta_noise
 
         return noisy_actions
 
 
-
-class DynamicModels(nn.Module):
-    def __init__(self, particles, noisy_actions, std, mean, *args, **kwargs):
+class DynamicsModel(nn.Module):
+    def __init__(self, *args, **kwargs):
         super(DynamicModels, self).__init__()
         """
-        :param particles: array of state of individual particles (x, y, theta)
-        :param noisy_actions: output of action sampler f ()
+        Dynamics model which models dynamics between actions and state
         """
-        self.particles = particles
-        self.noisy_actions = noisy_actions
-        # Std and mean of actions and states
-        self.std = std
-        self.mean = mean
 
         self.layers = nn.Sequential(
             nn.Linear(8,128),
@@ -93,56 +78,57 @@ class DynamicModels(nn.Module):
             nn.Linear(128,3),
             )
 
-    def transform_particles(self):
+    def transform_particles(self, particles, stds, means):
         """
         Transform particle state to network input form
-        """
-        trans_pos = (self.particles[:,:,:2] - self.mean["states"][:,:,:2]) \
-                    / self.std["states"][:,:,:2]
-        trans_theta_cos = np.cos(self.particles[:,:,2])
-        trans_theta_sin = np.sin(self.particles[:,:,2])
+        Args:
+          particles: array of size (batch_size, num_particles, 3)
 
-        particles_input = np.stack([trans_pos, 
-                                   trans_theta_cos,
-                                   trans_theta_sin], axis=-1)
+        returns:
+          particles_input: tensor of size (batch_size, num_particles, 4) with 
+                           channels (x, y, cos(theta), sin(theta))
+        """
+
+        norm_pos = (particles[:,:,:2] - means["states"][:,:,:2]) \
+                    / stds["states"][:,:,:2]
+        cos_theta = torch.cos(particles[:,:,2])
+        sin_theta = torch.sin(particles[:,:,2])
+
+        particles_input = torch.cat([norm_pos, 
+                                    cos_theta,
+                                    sin_theta], axis=-1)
 
         return particles_input
 
-    def model_input(self):
+    def model_input(self, noisy_actions, particles, stds, means):
         """
-        Create network model g input
+        Create input for dynamics model g
+        Args:
+          noisy_actions: output of action sampler f, 
+                         tensor of size (batch_size, num_particles, 3)
+        returns:
+          noisy_input: concatenated tensor of size (batch_size, num_particles, 8)
         """
-        particles_input = self.transform_particles()
-        action_input = self.noisy_actions / self.std["actions"]
-        input = np.stack([particles_input, actions_input], axis=-1)
+        particles_input = self.transform_particles(particles, stds, means)
+        noisy_actions = noisy_actions / stds["actions"]
+        noisy_input = torch.cat([particles_input, noisy_actions], axis=-1)
 
-        return input
+        return noisy_input
     
-    def forward(self, x):
+    def forward(self, noisy_actions, particles, stds, means):
         """
         Feedforward action input to obtain "delta state"
         """
-        x = torch.from_numpy(x)
-        x = x.view(-1,8)
-        x = self.layers(x)
+        noisy_input = self.model_input(noisy_actions, particles, stds, means)
 
-        return x
+        # Reshape concatenated tensor and pass to network
+        noisy_input = noisy_input.view(-1, 8)
+        batch_size = noisy_input.size(0)
+        delta_state = self.layers(noisy_input)
+        # Reshape output back to original size compatiable with particles array
+        delta_state = delta_state.view(batch_size, -1, 3)
 
-    def get_moved_particles(self):
-        """
-        Method to retrieve final particles with added motion
-        """
-        H, W = self.particles.shape[0], self.particles.shape[1]
-
-        input = self.model_input()
-
-        output_actions = self.forward(input)
-
-        output_actions = torch.numpy(output_actions)
-        output_actions = np.reshape((H, W, 3))
-        moved_particles = self.particles + output_actions
+        moved_particles = particles + delta_state
         moved_particles[:,:,2] = wrap_angle(moved_particles[:,:,2])
 
         return moved_particles
-
-
