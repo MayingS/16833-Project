@@ -122,7 +122,7 @@ class DPF:
                     incorrect_samples = w[batch_ind] - torch.diag(torch.diag(w[batch_ind]))
                     correct_item += torch.sum(-torch.log(correct_samples))
                     incorrect_item += torch.sum(-torch.log(1.0 - incorrect_samples))
-                loss = correct_item / batch_size + incorrect_item / (batch_size*(batch_size-1))
+                loss = correct_item / w.size()[0] + incorrect_item / (w.size()[0]*(w.size()[0]-1))
 
                 # log and visualize
                 if niter % self.log_freq == 0:
@@ -199,8 +199,7 @@ class DPF:
                 incorrect_samples = w[batch_ind] - torch.diag(torch.diag(w[batch_ind]))
                 correct_item += torch.sum(torch.log(correct_samples))
                 incorrect_item += torch.sum(torch.log(1.0 - incorrect_samples))
-            likelihood = (correct_item / self.trainparam['batch_size'] +
-                          incorrect_item / (self.trainparam['batch_size'] * (self.trainparam['batch_size'] - 1)))
+            likelihood = correct_item / w.size()[0] + incorrect_item / (w.size()[0] * (w.size()[0] - 1))
             likelihood_list.append(likelihood)
 
         likelihood = sum(likelihood_list) / len(likelihood_list)

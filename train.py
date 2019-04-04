@@ -54,7 +54,7 @@ def main():
     N = sta.shape[0]
     split_ind = int(N*args.data_slipt_ratio)
     train_dataset = DPFDataset(sta[:split_ind], obs[:split_ind], act[:split_ind])
-    eval_dataset = DPFDataset(sta[split_ind:], obs[split_ind:], act[split_ind])
+    eval_dataset = DPFDataset(sta[split_ind:], obs[split_ind:], act[split_ind:])
 
     dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds)
     # test train_likelihood_estimator
