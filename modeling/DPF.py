@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import shutil
+import math
 import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
@@ -103,6 +104,10 @@ class DPF:
             shutil.rmtree(log_dir)
         log_writer = SummaryWriter(log_dir)
 
+        check_point_dir = 'likelihood_estimator_checkpoint'
+        if not os.path.exists(check_point_dir):
+            os.makedirs(check_point_dir)
+
         niter = 0
         for epoch in range(epochs):
             self.observation_encoder.train()
@@ -141,12 +146,26 @@ class DPF:
                 print('Epoch {}: Val likelihood: {}'.format(epoch, likelihood))
                 log_writer.add_scalar('val/likelihood', likelihood, niter)
 
-    def get_likelihood(self, sta, obs):
-        """
+            if epoch % 10 == 0:
+                save_name1 = os.path.join(
+                    check_point_dir, 'encoder_checkpoint_{}.pth'.format(epoch))
+                save_name2 = os.path.join(
+                    check_point_dir, 'estimator_checkpoint_{}.pth'.format(epoch))
+                torch.save(self.observation_encoder.state_dict(), save_name1)
+                print('Saved encoder to {}'.format(save_name1))
+                torch.save(self.likelihood_estimator.state_dict(), save_name2)
+                print('Saved estimator to {}'.format(save_name2))
 
-        :param sta:
-        :param obs:
-        :return:
+    def get_likelihood(self, sta, obs):
+        """ Process the data input and get the model output
+
+        Args:
+          sta: Tensor with size (N, T, 3), states
+          obs: Tensor with size (N, T, 3, H, W), observations
+        Returns:
+            w: Tensor with size (N, T, T).
+               The diagonal entries are likelihood of observations at their states.
+               Other entries are likelihood of observations not at their states.
         """
         # obs (32, 20, 3, 24, 24) -> (32*20, 3, 24, 24)
         o = obs.view(-1, 3, 24, 24)
@@ -176,10 +195,12 @@ class DPF:
         return w
 
     def eval_likelihood_estimator(self, val_loader):
-        """
+        """ Eval the observation encoder and likelihood estimator
 
-        :param val_loader:
-        :return:
+        Args:
+          val_loader: Dataloader of val dataset
+        Return:
+          likelihood
         """
         likelihood_list = []
         self.observation_encoder.eval()
@@ -200,7 +221,7 @@ class DPF:
                 correct_item += torch.sum(torch.log(correct_samples))
                 incorrect_item += torch.sum(torch.log(1.0 - incorrect_samples))
             likelihood = correct_item / w.size()[0] + incorrect_item / (w.size()[0] * (w.size()[0] - 1))
-            likelihood_list.append(likelihood)
+            likelihood_list.append(math.exp(likelihood))
 
         likelihood = sum(likelihood_list) / len(likelihood_list)
         return likelihood
