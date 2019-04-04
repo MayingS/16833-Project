@@ -8,18 +8,21 @@ import config.set_parameters as sp
 class DPFDataset(data.Dataset):
     def __init__(self, states, observations, actions):
         params = sp.Params()
-        seq_length = params.train['seq_length']
-        # get a sequence every 5 steps
-        sta = [states[i:i+seq_length, :] for i in range(0, states.shape[0]-seq_length, 5)]
-        obs = [observations[i:i+seq_length, :, :, :].transpose(0, 3, 1, 2) for i in range(0, observations.shape[0]-seq_length, 5)]
-        act = [actions[i:i+seq_length, :] for i in range(0, actions.shape[0]-seq_length, 5)]
-        self.dataset = [(s, o, a) for s, o, a in zip(sta, obs, act)]
+        self.seq_length = params.train['seq_length']
+        self.states = states
+        self.observations = observations
+        self.actions = actions
+        self.steps = 5
 
     def __getitem__(self, index):
-        return self.dataset[index]
+        # get a sequence every 5 steps
+        sta = self.states[index*self.steps:index*self.steps+self.seq_length, :]
+        obs = self.observations[index*self.steps:index*self.steps+self.seq_length, :]
+        act = self.actions[index*self.steps:index*self.steps+self.seq_length, :]
+        return sta, obs, act
 
     def __len__(self):
-        return len(self.dataset)
+        return len(range(0, self.states.shape[0]-self.seq_length, self.steps))
 
 
 def wrap_angle(angle):
