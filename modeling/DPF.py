@@ -1,12 +1,9 @@
 import numpy as np
 import os
-<<<<<<< HEAD
 import modeling.motion_model.motion_model as motion
-=======
 import shutil
 import math
 import modeling.state_prediction as motion
->>>>>>> 942ed391467bdaeead0ca1a8f9bce397f32e3594
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
