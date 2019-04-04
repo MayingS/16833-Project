@@ -2,9 +2,10 @@ import numpy as np
 import os
 import torch.nn as nn
 
+from utils.data_process import *
 
 class ActionSampler(nn.Module):
-    def __init__(self, actions, particles, *args, **kwargs):
+    def __init__(self, actions, particles, std, mean, *args, **kwargs):
         super(ActionSampler, self).__init__()
         """
         :param actions: array of size (1,3) with motion between states
@@ -12,6 +13,10 @@ class ActionSampler(nn.Module):
         """
         self.actions = actions
         self.particles = particles
+
+        # Std and mean of data across time sequence
+        self.std = std
+        self.mean = mean
 
         self.layers = nn.Sequential(
             nn.Linear(6,32),
@@ -27,7 +32,7 @@ class ActionSampler(nn.Module):
         """
         # Propagate action over particles
         H, W = self.particles.shape[0], self.particles.shape[1]
-        actions_input = np.tile(self.actions.ravel(), (H, W, 1))
+        actions_input = np.tile(self.actions.ravel(), (H, W, 1)) / self.std["actions"]
         
         # Concatenate noise array to actions
         random_noise_input = np.random.normal(size=actions_input.shape)
@@ -52,13 +57,13 @@ class ActionSampler(nn.Module):
         H, W = self.particles.shape[0], self.particles.shape[1]
 
         noisy_input, actions_input = self.sample_noise()
-
+        # Get output noise
         out_noise = self.forward(noisy_input)
-
         out_noise = out_noise.numpy()
         out_noise = np.reshape((H, W, 3))
+        # Zero-mean output noise
         out_noise = out_noise - np.mean(out_noise)
-
+        # Add noise to actions
         noisy_actions = actions_input + out_noise
 
         return noisy_actions
@@ -66,7 +71,7 @@ class ActionSampler(nn.Module):
 
 
 class DynamicModels(nn.Module):
-    def __init__(self, particles, noisy_actions, *args, **kwargs):
+    def __init__(self, particles, noisy_actions, std, mean, *args, **kwargs):
         super(DynamicModels, self).__init__()
         """
         :param particles: array of state of individual particles (x, y, theta)
@@ -74,6 +79,9 @@ class DynamicModels(nn.Module):
         """
         self.particles = particles
         self.noisy_actions = noisy_actions
+        # Std and mean of actions and states
+        self.std = std
+        self.mean = mean
 
         self.layers = nn.Sequential(
             nn.Linear(8,128),
@@ -89,7 +97,8 @@ class DynamicModels(nn.Module):
         """
         Transform particle state to network input form
         """
-        trans_pos = self.particles[:,:,:2]
+        trans_pos = (self.particles[:,:,:2] - self.mean["states"][:,:,:2]) \
+                    / self.std["states"][:,:,:2]
         trans_theta_cos = np.cos(self.particles[:,:,2])
         trans_theta_sin = np.sin(self.particles[:,:,2])
 
@@ -104,7 +113,7 @@ class DynamicModels(nn.Module):
         Create network model g input
         """
         particles_input = self.transform_particles()
-        action_input = self.noisy_actions
+        action_input = self.noisy_actions / self.std["actions"]
         input = np.stack([particles_input, actions_input], axis=-1)
 
         return input
