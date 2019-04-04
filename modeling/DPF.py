@@ -117,7 +117,7 @@ class DPF:
                 # define loss (correct -> 1, incorrect -> 0) and optimizer
                 correct_item = 0
                 incorrect_item = 0
-                for batch_ind in range(batch_size):
+                for batch_ind in range(w.size()[0]):
                     correct_samples = torch.diag(w[batch_ind])
                     incorrect_samples = w[batch_ind] - torch.diag(torch.diag(w[batch_ind]))
                     correct_item += torch.sum(-torch.log(correct_samples))
@@ -194,7 +194,7 @@ class DPF:
             # calculate the likelihood
             correct_item = 0
             incorrect_item = 0
-            for batch_ind in range(self.trainparam['batch_size']):
+            for batch_ind in range(w.size()[0]):
                 correct_samples = torch.diag(w[batch_ind])
                 incorrect_samples = w[batch_ind] - torch.diag(torch.diag(w[batch_ind]))
                 correct_item += torch.sum(torch.log(correct_samples))
