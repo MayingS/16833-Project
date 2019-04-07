@@ -52,31 +52,6 @@ class ParticleProposer(nn.Module):
             nn.Tanh()
         )
     
-    def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
-        """
-        Args:
-            encoding: output of observation encoder tensor shape: (128, )
-            num_particles: number of particles
-            state_mins: minimum values of states, numpy array of shape (1, 2)
-            state_maxs: maximum values of states, numpy array of shape (1, 2)
-        Returns:
-            proposed_particles: np array of new proposed states: (N, )
-        """
-        # encoding = Variable(encoding, requires_grad=False)
-        encoding_rep = encoding.repeat(num_particles, 1)
-        proposed_particles = self.forward(encoding_rep)
-
-        # transform states 4 dim to 3 dim
-        x = proposed_particles[:, 0] * \
-            (state_maxs[0] - state_mins[0]) / 2.0 + (state_maxs[0] + state_mins[0]) / 2.0
-        y = proposed_particles[:, 1] * \
-            (state_maxs[1] - state_mins[1]) / 2.0 + (state_maxs[1] + state_mins[1]) / 2.0
-        theta = torch.atan2(proposed_particles[:, 2], proposed_particles[:, 3])
-
-        proposed_particles = torch.cat((x.unsqueeze(1), y.unsqueeze(1),\
-             theta.unsqueeze(1)), 1)
-
-        return proposed_particles
 
     def forward(self, x):
         return self.proposer(x)
