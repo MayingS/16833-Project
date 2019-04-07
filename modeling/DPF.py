@@ -7,11 +7,8 @@ import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
-<<<<<<< HEAD
 import utils.data_process as data_process
-=======
 from utils.visualize import *
->>>>>>> b9ca901e30efe0341702f6c41677992ae05ec9ee
 
 import torch
 import torch.utils
@@ -178,12 +175,6 @@ class DPF:
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-
-
-
-    
-
-        pass
 
     def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
         """
