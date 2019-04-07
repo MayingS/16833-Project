@@ -7,6 +7,7 @@ import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
+import utils.data_process as data_process
 from utils.visualize import *
 
 import torch
@@ -116,10 +117,90 @@ class DPF:
 
     def train_particle_proposer(self):
         """ Train the particle proposer k.
-
         :return:
         """
-        pass
+        batch_size = self.trainparam['batch_size']
+        epochs = self.trainparam['epochs']
+        lr = self.trainparam['learning_rate']
+        particle_num = self.trainparam['particle_num']
+        std = 0.2
+
+        optimizer = torch.optim.Adam(self.particle_proposer.params(), lr)
+
+        # use trained Observation encoder to get encodings of observation
+        # freeze observation encoder
+        for p in self.observation_encoder.parameters():
+                    p.requires_grad = False
+
+        if self.use_cuda:
+            self.observation_encoder.cuda()
+            self.particle_proposer.cuda()
+        
+        train_loader = torch.utils.data.DataLoader(
+            self.train_set,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True,
+            sampler=None)
+        val_loader = torch.utils.data.DataLoader(
+            self.eval_set,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True)
+
+
+
+        for epoch in range(epochs):
+            self.particle_proposer.train()
+
+            for i, (sta, obs, act) in enumerate(train_loader):
+                if self.use_cuda:
+                    obs = obs.cuda()
+                    sta = sta.cuda()
+
+                encoding = self.observation_encoder(obs)
+                new_particles = self.propose_particle(encoding, \
+                    particle_num, state_mins, state_maxs)
+                
+                sq_dist = data_process.square_distance(sta, new_particles)
+
+                activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
+                     * torch.exp(- sq_dist / (2.0 * std ** 2))
+
+                loss = 1e-16 + torch.sum(activations, -1)
+                loss = torch.mean(- torch.log(loss))
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+    def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
+        """
+        Args:
+            encoding: output of observation encoder tensor shape: (128, )
+            num_particles: number of particles
+            state_mins: minimum values of states, numpy array of shape (1, 2)
+            state_maxs: maximum values of states, numpy array of shape (1, 2)
+        Returns:
+            proposed_particles: tensor of new proposed states: (N, )
+        """
+        # encoding = Variable(encoding, requires_grad=False)
+        encoding_rep = encoding.repeat(num_particles, 1)
+        proposed_particles = self.particle_proposer(encoding_rep)
+
+        # transform states 4 dim to 3 dim
+        x = proposed_particles[:, 0] * \
+            (state_maxs[0] - state_mins[0]) / 2.0 + (state_maxs[0] + state_mins[0]) / 2.0
+        y = proposed_particles[:, 1] * \
+            (state_maxs[1] - state_mins[1]) / 2.0 + (state_maxs[1] + state_mins[1]) / 2.0
+        theta = torch.atan2(proposed_particles[:, 2], proposed_particles[:, 3])
+
+        proposed_particles = torch.cat((x.unsqueeze(1), y.unsqueeze(1),\
+             theta.unsqueeze(1)), 1)
+
+        return proposed_particles
 
     def train_likelihood_estimator(self):
         """ Train the observation likelihood estimator l (and h)
