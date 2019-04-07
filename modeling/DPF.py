@@ -7,6 +7,7 @@ import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
+from utils.visualize import *
 
 import torch
 import torch.utils
@@ -17,11 +18,12 @@ from tensorboardX import SummaryWriter
 
 
 class DPF:
-    def __init__(self, train_set=None, eval_set=None, means=None, stds=None):
+    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False):
         self.train_set = train_set
         self.eval_set = eval_set
         self.means = means
         self.stds = stds
+        self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
         self.observation_encoder = measurement.ObservationEncoder()
@@ -34,7 +36,8 @@ class DPF:
         self.trainparam = params.train
         self.testparam = params.test
 
-        self.use_cuda = torch.cuda.is_available()
+        # self.use_cuda = torch.cuda.is_available()
+        self.use_cuda = False
 
         self.log_freq = 10  # Steps
         self.test_freq = 2  # Epoch
@@ -164,7 +167,7 @@ class DPF:
             self.observation_encoder.train()
             self.likelihood_estimator.train()
 
-            for i, (sta, obs, act) in enumerate(train_loader):
+            for batch_id, (sta, obs, act) in enumerate(train_loader):
                 if self.use_cuda:
                     sta = sta.cuda()
                     obs = obs.cuda()
@@ -182,7 +185,7 @@ class DPF:
 
                 # log and visualize
                 if niter % self.log_freq == 0:
-                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss))
+                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, batch_id, len(train_loader), loss))
                     log_writer.add_scalar('train/loss', loss, niter)
 
                 # compute gradient and do SGD step
@@ -191,6 +194,14 @@ class DPF:
                 optimizer.step()
 
                 niter += 1
+
+                # visualize the output of the model
+                if self.visualize and epoch % 10 == 0:
+                    w = w.data.cpu().numpy()
+                    for i in range(w.shape[0]):
+                        plot_measurement(w[batch_id], save_image=True,
+                                         outdir='train_vis/measurement/epoch-{}'.format(epoch),
+                                         batch=batch_id, ind=i)
 
             if epoch % self.test_freq == 0:
                 likelihood = self.eval_likelihood_estimator(val_loader)
@@ -273,6 +284,14 @@ class DPF:
                 incorrect_item += torch.sum(torch.log(1.0 - incorrect_samples))
             likelihood = correct_item / w.size()[0] + incorrect_item / (w.size()[0] * (w.size()[0] - 1))
             likelihood_list.append(math.exp(likelihood))
+
+            # visualize the output of the model
+            if self.visualize:
+                w = w.data.cpu().numpy()
+                for j in range(w.shape[0]):
+                    plot_measurement(w[i], save_image=True,
+                                     outdir='eval_vis/measurement',
+                                     batch=i, ind=j)
 
         likelihood = sum(likelihood_list) / len(likelihood_list)
         return likelihood

@@ -4,6 +4,7 @@ import argparse
 
 from modeling.DPF import *
 from utils.data_process import *
+import torch.backends.cudnn as cudnn
 
 
 def args_parse():
@@ -18,12 +19,20 @@ def args_parse():
         '--data_slipt_ratio', help='The ratio to split the data into train and validation set',
         default=0.9
     )
+    parser.add_argument(
+        '--visualize', help='To visualize the model output', default=False
+    )
 
     args = parser.parse_args()
     return args
 
 
 def main():
+    rand_seed = 1234
+    np.random.seed(rand_seed)
+    torch.manual_seed(rand_seed)
+    cudnn.deterministic = True
+
     args = args_parse()
 
     data_dir = args.data_dir
@@ -31,6 +40,7 @@ def main():
     train_file = args.train_file
     train_file = os.path.join(data_dir, train_file + '.npz')
     assert train_file
+    vis = args.visualize
 
     # load the data
     sta, obs, act = make_dataset(train_file)
@@ -56,7 +66,7 @@ def main():
     train_dataset = DPFDataset(sta[:split_ind], obs[:split_ind], act[:split_ind])
     eval_dataset = DPFDataset(sta[split_ind:], obs[split_ind:], act[split_ind:])
 
-    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds)
+    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis)
     # test train_likelihood_estimator
     # dpf.train_likelihood_estimator()
 
