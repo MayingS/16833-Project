@@ -47,7 +47,6 @@ class ActionSampler(nn.Module):
 
         sampler_input, actions_input = self.sample_noise(actions, particles, stds, means)
 
-        '''
         # Reshape concatenated array and pass to newtwork
         sampler_input = sampler_input.view(-1, 6)
         batch_size = sampler_input.size(0)
@@ -56,11 +55,6 @@ class ActionSampler(nn.Module):
         delta_noise = delta_noise - torch.mean(delta_noise)
         # Reshape output back into original size (batch_size, num_particles, 3)
         delta_noise = delta_noise.view(batch_size, -1, 3)
-        '''
-        # Pass to network, output shape: (batch_size, num_particales, 3)
-        delta_noise = self.layers(sampler_input)
-        # Zero-centering of output noisy actions, shape: (batch_size, num_particales, 3)
-        delta_noise = delta_noise - torch.mean(delta_noise)
 
         noisy_actions = actions_input + delta_noise
 
@@ -127,16 +121,13 @@ class DynamicsModel(nn.Module):
         """
         noisy_input = self.model_input(noisy_actions, particles, stds, means)
         
-        '''
+
         # Reshape concatenated tensor and pass to network
         noisy_input = noisy_input.view(-1, 8)
         batch_size = noisy_input.size(0)
         delta_state = self.layers(noisy_input)
         # Reshape output back to original size compatiable with particles array
         delta_state = delta_state.view(batch_size, -1, 3)
-        '''
-        # Pass to network, output shape (batch_size, num_particles, 3)
-        delta_state = self.layers(noisy_input)
         # Scaled by state step sizes Et[abs(s_t-s_{t-1})], state_step_sizes is an array of size(3,)
         # delta_state = delta_state * state_step_sizes[None, None, :]
         delta_state = [delta_state[:, :, i:i+1] * state_step_sizes[i] for i in range(3)]
