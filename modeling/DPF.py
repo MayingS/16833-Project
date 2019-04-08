@@ -3,7 +3,6 @@ import os
 import modeling.motion_model.motion_model as motion
 import shutil
 import math
-import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
