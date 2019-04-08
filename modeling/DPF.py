@@ -82,10 +82,10 @@ class DPF:
             num_workers=self.globalparam['workers'],
             pin_memory=True)
 
-        optimizer = torch.optim.Adam(motion_model.params(), lr)
+        optimizer = torch.optim.Adam(motion_model.parameters(), lr)
 
         niter = 0
-        prev_sta = torch.tensor[0,0,0]
+        prev_sta = torch.tensor([0.0,0.0,0.0])
         for epoch in range(epochs):
             motion_model.train()
 
