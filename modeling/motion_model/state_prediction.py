@@ -121,18 +121,25 @@ class DynamicsModel(nn.Module):
 
         return noisy_input
     
-    def forward(self, noisy_actions, particles, stds, means):
+    def forward(self, noisy_actions, particles, state_step_sizes, stds, means):
         """
         Feedforward action input to obtain "delta state"
         """
         noisy_input = self.model_input(noisy_actions, particles, stds, means)
-
+        
+        '''
         # Reshape concatenated tensor and pass to network
         noisy_input = noisy_input.view(-1, 8)
         batch_size = noisy_input.size(0)
         delta_state = self.layers(noisy_input)
         # Reshape output back to original size compatiable with particles array
         delta_state = delta_state.view(batch_size, -1, 3)
+        '''
+        # Pass to network, output shape (batch_size, num_particles, 3)
+        delta_state = self.layers(noisy_input)
+        # Scaled by state step sizes Et[abs(s_t-s_{t-1})], state_step_sizes is an array of size(3,)
+        # delta_state = delta_state * state_step_sizes[None, None, :]
+        delta_state = [delta_state[:, :, i:i+1] * state_step_sizes[i] for i in range(3)]
 
         moved_particles = particles + delta_state
         moved_particles[:,:,2] = wrap_angle(moved_particles[:,:,2])
