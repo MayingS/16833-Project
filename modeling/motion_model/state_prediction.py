@@ -47,6 +47,7 @@ class ActionSampler(nn.Module):
 
         sampler_input, actions_input = self.sample_noise(actions, particles, stds, means)
 
+        '''
         # Reshape concatenated array and pass to newtwork
         sampler_input = sampler_input.view(-1, 6)
         batch_size = sampler_input.size(0)
@@ -55,6 +56,11 @@ class ActionSampler(nn.Module):
         delta_noise = delta_noise - torch.mean(delta_noise)
         # Reshape output back into original size (batch_size, num_particles, 3)
         delta_noise = delta_noise.view(batch_size, -1, 3)
+        '''
+        # Pass to network, output shape: (batch_size, num_particales, 3)
+        delta_noise = self.layers(sampler_input)
+        # Zero-centering of output noisy actions, shape: (batch_size, num_particales, 3)
+        delta_noise = delta_noise - torch.mean(delta_noise)
 
         noisy_actions = actions_input + delta_noise
 
