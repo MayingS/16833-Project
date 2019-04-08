@@ -29,11 +29,12 @@ class MotionModel(nn.Module):
 		Args:
 		  actions: array of size (1,3) containing (x, y, theta) actions
 		  particles: array of size (N-1, 3) containing particle states
+		  state_step_sizes: array of size (N-1, 3) containing the expection of the difference between two particle states
     	"""
 
     	# Feedforward
-    	noisy_actions = self.action_sampler(actions,particles,stds,means)
-    	moved_particles = self.dynamics_model(noisy_actions,particles,stds,means)
+    	noisy_actions = self.action_sampler(actions, particles, stds, means)
+    	moved_particles = self.dynamics_model(noisy_actions, particles, state_step_sizes, stds, means)
 
     	# Build loss
     	self.mle_loss = self.build_loss(moved_particles,
