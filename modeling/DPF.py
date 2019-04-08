@@ -38,6 +38,7 @@ class DPF:
         self.trainparam = params.train
         self.testparam = params.test
 
+        self.end2end = False
         # self.use_cuda = torch.cuda.is_available()
         self.use_cuda = False
 
@@ -128,10 +129,28 @@ class DPF:
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         std = 0.2
+        encoder_checkpoint = " "
+
+        log_dir = 'particle_proposer_log'
+        if os.path.exists(log_dir):
+            shutil.rmtree(log_dir)
+        log_writer = SummaryWriter(log_dir)
+
+        check_point_dir = 'particle_proposer_checkpoint'
+        if not os.path.exists(check_point_dir):
+            os.makedirs(check_point_dir)
 
         optimizer = torch.optim.Adam(self.particle_proposer.params(), lr)
 
         # use trained Observation encoder to get encodings of observation
+        if not self.end2end:
+            if os.path.isfile(encoder_checkpoint):
+                checkpoint = torch.load(encoder_checkpoint)
+                self.observation_encoder.load_state_dict(checkpoint)
+                print("Check point loaded!")
+            else:
+                print("Invalid check point directory...")
+
         # freeze observation encoder
         for p in self.observation_encoder.parameters():
                     p.requires_grad = False
@@ -154,8 +173,7 @@ class DPF:
             num_workers=self.globalparam['workers'],
             pin_memory=True)
 
-
-
+        niter = 0
         for epoch in range(epochs):
             self.particle_proposer.train()
 
@@ -174,12 +192,30 @@ class DPF:
                      * torch.exp(- sq_dist / (2.0 * std ** 2))
 
                 loss = 1e-16 + torch.sum(activations, -1)
-                loss = torch.mean(- torch.log(loss))
+                loss = torch.mean(-torch.log(loss))
+
+                if niter % self.log_freq == 0:
+                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss.item()))
+                    log_writer.add_scalar('train/loss', loss.item(), niter)
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
+                niter += 1
+            
+            # # Validation
+            # if epoch % self.test_freq == 0:
+                # loss_val = self.eval_particle_propser(val_loader)
+                # print('Epoch {}: Val loss: {}'.format(epoch, loss_val))
+                # log_writer.add_scalar('val/loss', loss_val, niter)
+
+            if epoch % 10 == 0:
+                save_path = os.path.join(
+                    check_point_dir, 'proposer_checkpoint_{}.pth'.format(epoch))
+                torch.save(self.particle_proposer.state_dict(), save_path)
+                print('Saved proposer to {}'.format(save_path))
+    
     def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
         """
         Args:
