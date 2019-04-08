@@ -19,11 +19,12 @@ from tensorboardX import SummaryWriter
 
 
 class DPF:
-    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False):
+    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False, state_step_sizes=None):
         self.train_set = train_set
         self.eval_set = eval_set
         self.means = means
         self.stds = stds
+        self.state_step_sizes = state_step_sizes
         self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
@@ -59,10 +60,13 @@ class DPF:
         epochs = self.trainparam['epochs']
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
-        state_step_sizes = 5
+        state_step_sizes = self.state_step_sizes
 
         motion_model = self.motion_model
         motion_model = motion_model.double()
+        
+        if self.use_cuda:
+            motion_model = motion_model.cuda()
 
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
