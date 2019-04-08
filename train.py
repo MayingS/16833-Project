@@ -59,6 +59,15 @@ def main():
 
     means = {'o': obs_mean, 'a': act_mean, 's': sta_mean}
     stds = {'o': obs_std, 'a': act_std, 's': sta_std}
+    
+    state_step_sizes = []
+    for i in range(3):
+        steps = sta[1:, i] - sta[:-1, i]
+        if i == 2:
+            steps = wrap_angle(steps)
+        state_step_sizes.append(np.mean(abs(steps)))
+    state_step_sizes[0] = state_step_sizes[1] = (state_step_sizes[0] + state_step_sizes[1]) / 2
+    state_step_sizes = np.array(state_step_sizes)
 
     # split the dataset into train and eval set
     N = sta.shape[0]
@@ -66,7 +75,7 @@ def main():
     train_dataset = DPFDataset(sta[:split_ind], obs[:split_ind], act[:split_ind])
     eval_dataset = DPFDataset(sta[split_ind:], obs[split_ind:], act[split_ind:])
 
-    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis)
+    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis, state_step_sizes=state_step_sizes)
     # test train_likelihood_estimator
     # dpf.train_likelihood_estimator()
 
