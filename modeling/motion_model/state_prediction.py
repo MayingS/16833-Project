@@ -63,7 +63,7 @@ class ActionSampler(nn.Module):
 
 class DynamicsModel(nn.Module):
     def __init__(self, *args, **kwargs):
-        super(DynamicModels, self).__init__()
+        super(DynamicsModel, self).__init__()
         """
         Dynamics model which models dynamics between actions and state
         """
