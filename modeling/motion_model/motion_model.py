@@ -38,8 +38,8 @@ class MotionModel(nn.Module):
 
     	# Build loss
     	self.mle_loss = self.build_loss(moved_particles,
-    									states,
-    									state_step_sizes)
+    					states,
+    					state_step_sizes)
 
     	return moved_particles
     	
