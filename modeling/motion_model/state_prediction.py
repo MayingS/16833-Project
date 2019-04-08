@@ -32,10 +32,10 @@ class ActionSampler(nn.Module):
                          actions propagated over all particles
         """
         # Normalize actions
-        actions = actions / stds["actions"]
+        actions_input = actions / stds["actions"]
         
         # Concatenate noise array to actions
-        random_noise_input = torch.rand_like(actions)
+        random_noise_input = torch.rand_like(actions_input)
         sampler_input = torch.cat((actions_input, random_noise_input), axis=-1)
         
         return sampler_input, actions_input
