@@ -98,6 +98,7 @@ class DPF:
                 actions = act.repeat(1, particle_num, 1).float()
                 states = sta.repeat(1, particle_num, 1).float()
                 
+                actions = actions[:-1, :, :]
                 particles = states[:-1, :, :]
                 states = states[1:, :, :]
                 
