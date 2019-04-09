@@ -49,7 +49,7 @@ class MotionModel(nn.Module):
     	dists = square_distance(moved_particles, states, state_step_sizes)
     	# Transform distances to probabilities sampled from a normal distribution
     	dist_probs = (1 / moved_particles) / torch.sqrt(2 * np.pi * std ** 2) \
-    				 * tf.exp(-dists / (2.0 * std ** 2))
+    				 * torch.exp(-dists / (2.0 * std ** 2))
     	
     	# Add e for numerical stability
     	e = 1e-12
