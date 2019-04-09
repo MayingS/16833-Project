@@ -56,28 +56,28 @@ class DPF:
         
         :return:
         """
-        batch_size = self.trainparam['batch_size']
+        #batch_size = self.trainparam['batch_size']
+        seq_len = 32
         epochs = self.trainparam['epochs']
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         state_step_sizes = self.state_step_sizes_
 
         motion_model = self.motion_model
-        motion_model = motion_model.double()
         
         if self.use_cuda:
             motion_model = motion_model.cuda()
 
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
-            batch_size=batch_size,
+            batch_size=seq_len,
             shuffle=False,
             num_workers=self.globalparam['workers'],
             pin_memory=True,
             sampler=None)
         val_loader = torch.utils.data.DataLoader(
             self.eval_set,
-            batch_size=batch_size,
+            batch_size=seq_len,
             shuffle=False,
             num_workers=self.globalparam['workers'],
             pin_memory=True)
@@ -85,7 +85,6 @@ class DPF:
         optimizer = torch.optim.Adam(motion_model.parameters(), lr)
 
         niter = 0
-        prev_sta = torch.tensor([0.0,0.0,0.0], dtype=torch.float32)
         for epoch in range(epochs):
             motion_model.train()
 
@@ -96,9 +95,16 @@ class DPF:
                 # -particles: true state at previous time step
                 # -states: true state at current time step
 
-                actions = act.repeat(1, particle_num, 1)
-                particles = prev_sta.repeat(1, particle_num, 1)
-                states = sta.repeat(1, particle_num, 1)
+                actions = act.repeat(1, particle_num, 1).float()
+                states = sta.repeat(1, particle_num, 1).float()
+                
+                particles = states[:-1, :, :]
+                states = states[1:, :, :]
+                
+                if self.use_cuda:
+                    actions = actions.cuda()
+                    particles = particles.cuda()
+                    states = states.cuda()
 
                 # Feedforward and compute loss
                 moved_particles = motion_model(actions,
@@ -108,7 +114,6 @@ class DPF:
                                                self.means,
                                                state_step_sizes)
                 loss = motion_model.loss
-                prev_sta = sta
 
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
