@@ -10,11 +10,11 @@ class MotionModel(nn.Module):
     Main class for motion model, consists of action sampler f
     and dynamics model g
     """
-	def __init__(self):
-		super(MotionModel, self).__init__()
-		"""
-		Build motion model from networks f and g
-		"""
+    def __init__(self):
+	super(MotionModel, self).__init__()
+	"""
+	Build motion model from networks f and g
+	"""
 
         self.action_sampler = ActionSampler()
         self.dynamics_model = DynamicsModel()
@@ -27,9 +27,9 @@ class MotionModel(nn.Module):
     	"""
     	Forward actions and particles through motion model to obtain new particle states
 		Args:
-		  actions: array of size (1,3) containing (x, y, theta) actions
-		  particles: array of size (N-1, 3) containing particle states
-		  state_step_sizes: array of size (N-1, 3) containing the expection of the difference between two particle states
+		  actions: tensor of size (batch_size, N, 3) containing (x, y, theta) actions
+		  particles: tensor of size (batch_size, N-1, 3) containing particle states
+		  state_step_sizes: array of size (3,) containing the expection of the difference between two particle states
     	"""
 
     	# Feedforward
