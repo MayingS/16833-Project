@@ -44,17 +44,17 @@ class MotionModel(nn.Module):
     	return moved_particles
     	
     def build_loss(self, moved_particles, states, state_step_sizes):
-    	# Compute distance between each particle state and ground truth state
+	# Compute distance between each particle state and ground truth state
 	std = 0.01
-    	dists = square_distance(moved_particles, states, state_step_sizes)
-    	# Transform distances to probabilities sampled from a normal distribution
-    	dist_probs = (1 / moved_particles) / torch.sqrt(2 * np.pi * std ** 2) \
-    				 * torch.exp(-dists / (2.0 * std ** 2))
-    	
-    	# Add e for numerical stability
-    	e = 1e-12
-    	# Compute most likelihood estimate loss
-    	mle_loss = torch.mean(-torch.log(e + torch.sum(dist_probs)))
-
-    	return mle_loss
+	dists = square_distance(moved_particles, states, state_step_sizes)
+	# Transform distances to probabilities sampled from a normal distribution
+	dist_probs = (1 / float(moved_particles.size(1))) / ((2 * np.pi * std ** 2)**0.5) \
+	             * torch.exp(-dists / (2.0 * std ** 2))
+	
+	# Add e for numerical stability
+	e = 1e-12
+	# Compute most likelihood estimate loss
+	mle_loss = torch.mean(-torch.log(e + torch.sum(dist_probs)))
+	
+	return mle_loss
 
