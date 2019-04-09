@@ -72,7 +72,7 @@ class DynamicsModel(nn.Module):
         """
 
         self.layers = nn.Sequential(
-            nn.Linear(8,128),
+            nn.Linear(7,128),
             nn.ReLU(),
             nn.Linear(128,128),
             nn.ReLU(),
@@ -109,7 +109,7 @@ class DynamicsModel(nn.Module):
           noisy_actions: output of action sampler f, 
                          tensor of size (batch_size, num_particles, 3)
         returns:
-          noisy_input: concatenated tensor of size (batch_size, num_particles, 8)
+          noisy_input: concatenated tensor of size (batch_size, num_particles, 7)
         """
         particles_input = self.transform_particles(particles, stds, means)
         for i in range(3):
@@ -123,11 +123,10 @@ class DynamicsModel(nn.Module):
         Feedforward action input to obtain "delta state"
         """
         noisy_input = self.model_input(noisy_actions, particles, stds, means)
-        
 
         # Reshape concatenated tensor and pass to network
         batch_size = noisy_input.size(0)
-        noisy_input = noisy_input.view(-1, 8)
+        noisy_input = noisy_input.view(-1, 7)
         delta_state = self.layers(noisy_input)
         # Reshape output back to original size compatiable with particles array
         delta_state = delta_state.view(batch_size, -1, 3)
