@@ -56,8 +56,7 @@ class DPF:
         
         :return:
         """
-        #batch_size = self.trainparam['batch_size']
-        seq_len = 32
+        batch_size = self.trainparam['batch_size']
         epochs = self.trainparam['epochs']
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
@@ -71,7 +70,7 @@ class DPF:
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
             batch_size=seq_len,
-            shuffle=False,
+            shuffle=True,
             num_workers=self.globalparam['workers'],
             pin_memory=True,
             sampler=None)
@@ -94,13 +93,17 @@ class DPF:
                 # -actions action at current time step
                 # -particles: true state at previous time step
                 # -states: true state at current time step
-
-                actions = act.repeat(1, particle_num, 1).float()
-                states = sta.repeat(1, particle_num, 1).float()
                 
-                actions = actions[:-1, :, :]
-                particles = states[:-1, :, :]
-                states = states[1:, :, :]
+                # Shape: (batch_size, seq_len, 1, 3)
+                act = act.unsqueeze(2)
+                sta = sta.unsqueeze(2)
+                # Shape: (batch_size, seq_len, num_particle, 3)
+                actions = act.repeat(1, 1, particle_num, 1).float()
+                states = sta.repeat(1, 1, particle_num, 1).float()
+                # Shape: (batch_size*(seq_len-1), num_particle, 3)
+                actions = actions[:, :-1, :, :].contiguous().view(-1, particle_num, act.size(3))
+                particles = states[:, :-1, :, :].contiguous().view(-1, particle_num, sta.size(3))
+                states = states[:, 1:, :, :].contiguous().view(-1, particle_num, sta.size(3))
                 
                 if self.use_cuda:
                     actions = actions.cuda()
