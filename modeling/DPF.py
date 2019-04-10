@@ -61,22 +61,34 @@ class DPF:
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         state_step_sizes = self.state_step_sizes_
+        mode = self.trainparam['train_motion_model_mode']
 
         motion_model = self.motion_model
         
+        log_dir = 'log/motion_model/mode_{}/'.format(mode)
+        if os.path.exists(log_dir):
+            shutil.rmtree(log_dir)
+        os.makedirs(log_dir)
+        writer = SummaryWriter(log_dir)
+      
+        save_dir = 'model/motion_model/mode_{}/'.format(mode)
+        if os.path.exists(save_dir):
+            shutil.rmtree(save_dir)
+        os.makedirs(save_dir)
+
         if self.use_cuda:
             motion_model = motion_model.cuda()
 
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
-            batch_size=seq_len,
-            shuffle=True,
+            batch_size=batch_size,
+            shuffle=False,
             num_workers=self.globalparam['workers'],
             pin_memory=True,
             sampler=None)
         val_loader = torch.utils.data.DataLoader(
             self.eval_set,
-            batch_size=seq_len,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=self.globalparam['workers'],
             pin_memory=True)
@@ -93,7 +105,7 @@ class DPF:
                 # -actions action at current time step
                 # -particles: true state at previous time step
                 # -states: true state at current time step
-                
+
                 # Shape: (batch_size, seq_len, 1, 3)
                 act = act.unsqueeze(2)
                 sta = sta.unsqueeze(2)
@@ -109,14 +121,14 @@ class DPF:
                     actions = actions.cuda()
                     particles = particles.cuda()
                     states = states.cuda()
-
                 # Feedforward and compute loss
                 moved_particles = motion_model(actions,
                                                particles,
                                                states,
                                                self.stds,
                                                self.means,
-                                               state_step_sizes)
+                                               state_step_sizes,
+                                               mode)
                 loss = motion_model.loss
 
                 # compute gradient and do SGD step
@@ -125,8 +137,14 @@ class DPF:
                 optimizer.step()
 
                 niter += 1
+                
+                if niter % self.log_freq == 0:
+                    print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
+                    writer.add_scalar('train/loss', loss, niter)
+                if niter % 1000 == 0:
+                    torch.save(motion_model.state_dict(), save_dir+'motion_model_' + repr(niter) + '.pth')
+        torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
 
-                print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
 
     def train_particle_proposer(self):
         """ Train the particle proposer k.
