@@ -30,10 +30,13 @@ class MotionModel(nn.Module):
 	    actions: tensor of size (batch_size, N, 3) containing (x, y, theta) actions
 	    particles: tensor of size (batch_size, N-1, 3) containing particle states
 	    state_step_sizes: array of size (3,) containing the expection of the difference between two particle states
+	    mode: 0: not use dynamics model, 1: use dynamics model
     	"""
 
     	# Feedforward
     	noisy_actions = self.action_sampler(actions, particles, stds, means)
+	
+	
     	moved_particles = self.dynamics_model(noisy_actions, particles, state_step_sizes, stds, means)
 
     	# Build loss
