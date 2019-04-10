@@ -59,7 +59,7 @@ class ActionSampler(nn.Module):
         # Reshape output back into original size (batch_size, num_particles, 3)
         delta_noise = delta_noise.view(batch_size, -1, 3)
 
-        noisy_actions = actions_input + delta_noise
+        noisy_actions = actions + delta_noise
 
         return noisy_actions
 
