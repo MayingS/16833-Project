@@ -32,13 +32,11 @@ class MotionModel(nn.Module):
     	"""
 
     	# Feedforward
-    	noisy_actions = self.action_sampler(actions,particles,stds,means)
-    	moved_particles = self.dynamics_model(noisy_actions,particles,stds,means)
+    	noisy_actions = self.action_sampler(actions, particles, stds, means)
+    	moved_particles = self.dynamics_model(noisy_actions, particles, stds, means)
 
     	# Build loss
-    	self.mle_loss = self.build_loss(moved_particles,
-    									states,
-    									state_step_sizes)
+    	self.mle_loss = self.build_loss(moved_particles, states, state_step_sizes)
 
     	return moved_particles
     	
