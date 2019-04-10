@@ -101,7 +101,7 @@ class DPF:
                 actions = act.repeat(1, 1, particle_num, 1).float()
                 states = sta.repeat(1, 1, particle_num, 1).float()
                 # Shape: (batch_size*(seq_len-1), num_particle, 3)
-                actions = actions[:, :-1, :, :].contiguous().view(-1, particle_num, act.size(3))
+                actions = actions[:, 1:, :, :].contiguous().view(-1, particle_num, act.size(3))
                 particles = states[:, :-1, :, :].contiguous().view(-1, particle_num, sta.size(3))
                 states = states[:, 1:, :, :].contiguous().view(-1, particle_num, sta.size(3))
                 
