@@ -117,12 +117,12 @@ def make_dataset(filename):
     return states, observations, actions
 
 
-def square_distance(s_t, s, state_step_sizes):
+def square_distance(s_t, s, state_step_sizes=np.array([5,5,5])):
     """ Calcuate distances between two sets of states for particle proposer backprog
     Args:
-      s_t: ground truth states ()
-      s: proposed states
-      state_step_size
+      s_t: ground truth states (N, 3)
+      s: proposed states (N, 3)
+      state_step_size: numpy array (3,), step of each state dim
     Returns:
       dist: distance between two states
     """
@@ -137,6 +137,13 @@ def square_distance(s_t, s, state_step_sizes):
         dist += (diff / state_step_sizes[i]) ** 2
     return dist
 
+def batch_statistics(batch):
+    """ Get statistics of batch of states
+    Args: 
+      batch: Tensor (N, 3), batch of states
+    """
+
+    pass
 
 if __name__ == '__main__':
     states, observations, actions = make_dataset('data/100s/nav01_train.npz')

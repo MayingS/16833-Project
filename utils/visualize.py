@@ -1,6 +1,7 @@
 import argparse
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 from modeling.DPF import *
 
@@ -23,4 +24,5 @@ def plot_measurement(measurement_output, save_image=False, outdir=None, batch=No
     if save_image:
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        plt.imsave('{}/measurement_model_output_{}_{}.jpg'.format(outdir, batch, ind), measurement_output)
+        plt.imsave('{}/measurement_model_output_{}_{}.jpg'.format(outdir, batch, ind),
+                   measurement_output, cmap='coolwarm')

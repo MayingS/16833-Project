@@ -3,10 +3,10 @@ import os
 import modeling.motion_model.motion_model as motion
 import shutil
 import math
-import modeling.state_prediction as motion
 import modeling.measurement_update as measurement
 import modeling.resampling as resample
 import config.set_parameters as sp
+import utils.data_process as data_process
 from utils.visualize import *
 
 import torch
@@ -18,11 +18,12 @@ from tensorboardX import SummaryWriter
 
 
 class DPF:
-    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False):
+    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False, state_step_sizes_=None):
         self.train_set = train_set
         self.eval_set = eval_set
         self.means = means
         self.stds = stds
+        self.state_step_sizes_ = state_step_sizes_
         self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
@@ -36,6 +37,7 @@ class DPF:
         self.trainparam = params.train
         self.testparam = params.test
 
+        self.end2end = False
         # self.use_cuda = torch.cuda.is_available()
         self.use_cuda = False
 
@@ -58,11 +60,113 @@ class DPF:
         epochs = self.trainparam['epochs']
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
-        state_step_sizes = 5
+        state_step_sizes = self.state_step_sizes_
 
         motion_model = self.motion_model
-        motion_model = motion_model.double()
+        
+        if self.use_cuda:
+            motion_model = motion_model.cuda()
 
+        train_loader = torch.utils.data.DataLoader(
+            self.train_set,
+            batch_size=seq_len,
+            shuffle=True,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True,
+            sampler=None)
+        val_loader = torch.utils.data.DataLoader(
+            self.eval_set,
+            batch_size=seq_len,
+            shuffle=False,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True)
+
+        optimizer = torch.optim.Adam(motion_model.parameters(), lr)
+
+        niter = 0
+        for epoch in range(epochs):
+            motion_model.train()
+
+            for iteration, (sta, obs, act) in enumerate(train_loader):
+                # Build ground truth inputs of size (batch_size, num_particles, 3)
+                # 
+                # -actions action at current time step
+                # -particles: true state at previous time step
+                # -states: true state at current time step
+                
+                # Shape: (batch_size, seq_len, 1, 3)
+                act = act.unsqueeze(2)
+                sta = sta.unsqueeze(2)
+                # Shape: (batch_size, seq_len, num_particle, 3)
+                actions = act.repeat(1, 1, particle_num, 1).float()
+                states = sta.repeat(1, 1, particle_num, 1).float()
+                # Shape: (batch_size*(seq_len-1), num_particle, 3)
+                actions = actions[:, 1:, :, :].contiguous().view(-1, particle_num, act.size(3))
+                particles = states[:, :-1, :, :].contiguous().view(-1, particle_num, sta.size(3))
+                states = states[:, 1:, :, :].contiguous().view(-1, particle_num, sta.size(3))
+                
+                if self.use_cuda:
+                    actions = actions.cuda()
+                    particles = particles.cuda()
+                    states = states.cuda()
+
+                # Feedforward and compute loss
+                moved_particles = motion_model(actions,
+                                               particles,
+                                               states,
+                                               self.stds,
+                                               self.means,
+                                               state_step_sizes)
+                loss = motion_model.loss
+
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                niter += 1
+
+                print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
+
+    def train_particle_proposer(self):
+        """ Train the particle proposer k.
+        :return:
+        """
+        batch_size = self.trainparam['batch_size']
+        epochs = self.trainparam['epochs']
+        lr = self.trainparam['learning_rate']
+        particle_num = self.trainparam['particle_num']
+        std = 0.2
+        encoder_checkpoint = " "
+
+        log_dir = 'particle_proposer_log'
+        if os.path.exists(log_dir):
+            shutil.rmtree(log_dir)
+        log_writer = SummaryWriter(log_dir)
+
+        check_point_dir = 'particle_proposer_checkpoint'
+        if not os.path.exists(check_point_dir):
+            os.makedirs(check_point_dir)
+
+        optimizer = torch.optim.Adam(self.particle_proposer.params(), lr)
+
+        # use trained Observation encoder to get encodings of observation
+        if not self.end2end:
+            if os.path.isfile(encoder_checkpoint):
+                checkpoint = torch.load(encoder_checkpoint)
+                self.observation_encoder.load_state_dict(checkpoint)
+                print("Check point loaded!")
+            else:
+                print("Invalid check point directory...")
+
+        # freeze observation encoder
+        for p in self.observation_encoder.parameters():
+                    p.requires_grad = False
+
+        if self.use_cuda:
+            self.observation_encoder.cuda()
+            self.particle_proposer.cuda()
+        
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
             batch_size=batch_size,
@@ -77,49 +181,74 @@ class DPF:
             num_workers=self.globalparam['workers'],
             pin_memory=True)
 
-        optimizer = torch.optim.Adam(motion_model.params(), lr)
-
         niter = 0
-        prev_sta = torch.tensor[0,0,0]
         for epoch in range(epochs):
-            motion_model.train()
+            self.particle_proposer.train()
 
-            for iteration, (sta, obs, act) in enumerate(train_loader):
-                # Build ground truth inputs of size (batch_size, num_particles, 3)
-                # 
-                # -actions action at current time step
-                # -particles: true state at previous time step
-                # -states: true state at current time step
+            for i, (sta, obs, act) in enumerate(train_loader):
+                if self.use_cuda:
+                    obs = obs.cuda()
+                    sta = sta.cuda()
 
-                actions = act.repeat(1, particle_num, 1)
-                particles = prev_sta.repeat(1, particle_num, 1)
-                states = sta.repeat(1, particle_num, 1)
+                encoding = self.observation_encoder(obs)
+                new_particles = self.propose_particle(encoding, \
+                    particle_num, state_mins, state_maxs)
+                
+                sq_dist = data_process.square_distance(sta, new_particles)
 
-                # Feedforward and compute loss
-                moved_particles = motion_model(actions,
-                                               particles,
-                                               states,
-                                               self.stds,
-                                               self.means,
-                                               state_step_sizes)
-                loss = motion_model.loss
-                prev_sta = sta
+                activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
+                     * torch.exp(- sq_dist / (2.0 * std ** 2))
 
-                # compute gradient and do SGD step
+                loss = 1e-16 + torch.sum(activations, -1)
+                loss = torch.mean(-torch.log(loss))
+
+                if niter % self.log_freq == 0:
+                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss.item()))
+                    log_writer.add_scalar('train/loss', loss.item(), niter)
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
                 niter += 1
+            
+            # # Validation
+            # if epoch % self.test_freq == 0:
+                # loss_val = self.eval_particle_propser(val_loader)
+                # print('Epoch {}: Val loss: {}'.format(epoch, loss_val))
+                # log_writer.add_scalar('val/loss', loss_val, niter)
 
-                print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
-
-    def train_particle_proposer(self):
-        """ Train the particle proposer k.
-
-        :return:
+            if epoch % 10 == 0:
+                save_path = os.path.join(
+                    check_point_dir, 'proposer_checkpoint_{}.pth'.format(epoch))
+                torch.save(self.particle_proposer.state_dict(), save_path)
+                print('Saved proposer to {}'.format(save_path))
+    
+    def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
         """
-        pass
+        Args:
+            encoding: output of observation encoder tensor shape: (128, )
+            num_particles: number of particles
+            state_mins: minimum values of states, numpy array of shape (1, 2)
+            state_maxs: maximum values of states, numpy array of shape (1, 2)
+        Returns:
+            proposed_particles: tensor of new proposed states: (N, )
+        """
+        # encoding = Variable(encoding, requires_grad=False)
+        encoding_rep = encoding.repeat(num_particles, 1)
+        proposed_particles = self.particle_proposer(encoding_rep)
+
+        # transform states 4 dim to 3 dim
+        x = proposed_particles[:, 0] * \
+            (state_maxs[0] - state_mins[0]) / 2.0 + (state_maxs[0] + state_mins[0]) / 2.0
+        y = proposed_particles[:, 1] * \
+            (state_maxs[1] - state_mins[1]) / 2.0 + (state_maxs[1] + state_mins[1]) / 2.0
+        theta = torch.atan2(proposed_particles[:, 2], proposed_particles[:, 3])
+
+        proposed_particles = torch.cat((x.unsqueeze(1), y.unsqueeze(1),\
+             theta.unsqueeze(1)), 1)
+
+        return proposed_particles
 
     def train_likelihood_estimator(self):
         """ Train the observation likelihood estimator l (and h)

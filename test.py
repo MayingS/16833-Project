@@ -25,10 +25,6 @@ def args_parse():
         '--train_file', help='The filename of the train data', default='nav01_train'
     )
     parser.add_argument(
-        '--data_slipt_ratio', help='The ratio to split the data into train and validation set',
-        default=0.9
-    )
-    parser.add_argument(
         '--test_file', help='The filename of the test data', default='nav01_test'
     )
     parser.add_argument(
