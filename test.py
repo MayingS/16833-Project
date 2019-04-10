@@ -6,6 +6,8 @@ from utils.data_process import *
 from utils.visualize import *
 from modeling.DPF import *
 import modeling.measurement_update as measurement
+import modeling.motion_model.motion_model as motion
+import config.set_parameters as sp
 
 
 def args_parse():
@@ -17,6 +19,10 @@ def args_parse():
     parser.add_argument(
         '--likelihood_estimator', help='the path of the trained likelihood estimator',
         default='likelihood_estimator_checkpoint/estimator_checkpoint_570.pth'
+    )
+    parser.add_argument(
+        '--motion_model', help='the path of the trained motion_model',
+        default='model/motion_model/mode_0/motion_model.pth'
     )
     parser.add_argument(
         '--data_dir', help='The directory of the data file.', default='data/100s'
@@ -70,6 +76,26 @@ def main():
 
     means = {'o': obs_mean, 'a': act_mean, 's': sta_mean}
     stds = {'o': obs_std, 'a': act_std, 's': sta_std}
+    
+    state_step_sizes = []
+    for i in range(3):
+        steps = train_sta[1:, i] - train_sta[:-1, i]
+        if i == 2:
+            steps = wrap_angle(steps)
+        state_step_sizes.append(np.mean(abs(steps)))
+    state_step_sizes[0] = state_step_sizes[1] = (state_step_sizes[0] + state_step_sizes[1]) / 2
+    state_step_sizes = np.array(state_step_sizes)
+    
+    # create the validation dataset
+    N = train_sta.shape[0]
+    split_ind = int(N*0.9)
+    eval_dataset = DPFDataset(train_sta[split_ind:], train_obs[split_ind:], train_act[split_ind:])
+    val_loader = torch.utils.data.DataLoader(
+            eval_dataset,
+            batch_size=32,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True)
 
     # create the whole model instance
     dpf = DPF(means=means, stds=stds)
@@ -87,21 +113,25 @@ def main():
 
     observation_encoder_path = args.observation_encoder
     likelihood_estimator_path = args.likelihood_estimator
+    motion_model_path = args.motion_model
 
     # load trained model
     observation_encoder = measurement.ObservationEncoder()
     likelihood_estimator = measurement.ObservationLikelihoodEstimator()
+    motion_model = motion.MotionModel()
     observation_encoder.load_state_dict(torch.load(observation_encoder_path))
     likelihood_estimator.load_state_dict(torch.load(likelihood_estimator_path))
+    motion_model.load_state_dict(torch.load(args.motion_model_path))
 
     dpf.observation_encoder = observation_encoder.double()
     dpf.likelihood_estimator = likelihood_estimator.double()
 
     vis_outdir = args.vis_outdir
     if not os.path.exists(vis_outdir):
-        os.path.exists(vis_outdir)
+        os.path.makedirs(vis_outdir)
 
     test(dpf, test_loader, args.visualize, args.vis_outdir)
+    test_motion_model(val_loader, motion_model, args.vis_outdir)
 
 
 def test(dpf, test_loader, vis=False, vis_outdir=None):
@@ -132,6 +162,40 @@ def test(dpf, test_loader, vis=False, vis_outdir=None):
                 os.makedirs(meas_vis_dir)
             for i in range(w.shape[0]):
                 plot_measurement(w[i], save_image=True, outdir=meas_vis_dir, batch=batch_id, ind=i)
+
+def test_motion_model(val_loader, motion_model, vis_outdir):
+    """Test the motion model
+    """
+    particle_num = sp.Params().train['particle_num']
+    mode = sp.Params().train['train_motion_model_mode']
+    for batch_idx, (sta, obs, act) in enumerate(val_loader):
+        # Shape: (batch_size, seq_len, 1, 3)
+        act = act.unsqueeze(2)
+        sta = sta.unsqueeze(2)
+        # Shape: (batch_size, seq_len, num_particle, 3)
+        actions = act.repeat(1, 1, particle_num, 1).float()
+        states = sta.repeat(1, 1, particle_num, 1).float()
+        # Shape: (batch_size*(seq_len-1), num_particle, 3)
+        actions = actions[:, 1:, :, :].contiguous().view(-1, particle_num, act.size(3))
+        particles = states[:, :-1, :, :].contiguous().view(-1, particle_num, sta.size(3))
+        states = states[:, 1:, :, :].contiguous().view(-1, particle_num, sta.size(3))
+
+        moved_particles = motion_model(actions,
+                                       particles,
+                                       states,
+                                       stds,
+                                       means,
+                                       state_step_sizes,
+                                       mode)
+
+        particles = particles.cpu().detach().numpy()
+        states = states.cpu().detach().numpy()
+        moved_particles = moved_particles.cpu().detach().numpy()
+        
+        plot_motion_model('nav01', vis_outdir, particles, states, moved_particles)
+
+        break
+
 
 
 if __name__ == '__main__':
