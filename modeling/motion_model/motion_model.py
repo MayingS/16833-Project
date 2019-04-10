@@ -23,13 +23,13 @@ class MotionModel(nn.Module):
     def loss(self):
         return self.mle_loss
 
-    def forward(self, actions, particles, states, stds, means, state_step_sizes):
-    	"""
-    	Forward actions and particles through motion model to obtain new particle states
-		Args:
-		  actions: tensor of size (batch_size, N, 3) containing (x, y, theta) actions
-		  particles: tensor of size (batch_size, N-1, 3) containing particle states
-		  state_step_sizes: array of size (3,) containing the expection of the difference between two particle states
+    def forward(self, actions, particles, states, stds, means, state_step_sizes, mode):
+        """
+	Forward actions and particles through motion model to obtain new particle states
+	Args:
+	    actions: tensor of size (batch_size, N, 3) containing (x, y, theta) actions
+	    particles: tensor of size (batch_size, N-1, 3) containing particle states
+	    state_step_sizes: array of size (3,) containing the expection of the difference between two particle states
     	"""
 
     	# Feedforward
