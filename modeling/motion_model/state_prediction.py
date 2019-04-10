@@ -33,9 +33,9 @@ class ActionSampler(nn.Module):
                          actions propagated over all particles
         """
         # Normalize actions
+        actions_input = torch.zeros(actions.size()).float
         for i in range(3):
-            actions[:, :, i]/ = stds['a'][i]
-        actions_input = actions
+            actions_input[:, :, i] = actions[:, :, i] / stds['a'][i]
         
         # Concatenate noise array to actions
         random_noise_input = torch.rand_like(actions_input)
@@ -91,10 +91,11 @@ class DynamicsModel(nn.Module):
           particles_input: tensor of size (batch_size, num_particles, 4) with 
                            channels (x, y, cos(theta), sin(theta))
         """
+        norm_pos = torch.zeros(particles.size()).float
         for i in range(2):
-            particles[:,:,i] = (particles[:,:,i] - means["s"][i]) \
+            norm_pos[:,:,i] = (particles[:,:,i] - means["s"][i]) \
                     / stds["s"][i]
-        norm_pos = particles[:,:,:2]
+        norm_pos = norm_pos[:,:,:2]
         cos_theta = torch.cos(particles[:,:,2]).view(-1, particles.size(1), 1)
         sin_theta = torch.sin(particles[:,:,2]).view(-1, particles.size(1), 1)
 
@@ -112,9 +113,10 @@ class DynamicsModel(nn.Module):
           noisy_input: concatenated tensor of size (batch_size, num_particles, 7)
         """
         particles_input = self.transform_particles(particles, stds, means)
+        actions_input = torch.zeros(noisy_actions.size()).float
         for i in range(3):
-            noisy_actions[:, :, i] /= stds['a'][i]
-        noisy_input = torch.cat((particles_input, noisy_actions), dim=-1)
+            actions_input[:, :, i] = noisy_actions[:, :, i] / stds['a'][i]
+        noisy_input = torch.cat((particles_input, actions_input), dim=-1)
 
         return noisy_input
     
@@ -131,7 +133,6 @@ class DynamicsModel(nn.Module):
         # Reshape output back to original size compatiable with particles array
         delta_state = delta_state.view(batch_size, -1, 3)
         # Scaled by state step sizes Et[abs(s_t-s_{t-1})], state_step_sizes is an array of size(3,)
-        # delta_state = delta_state * state_step_sizes[None, None, :]
         for i in range(3):
             delta_state[:, :, i] *= state_step_sizes[i]
 
