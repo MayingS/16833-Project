@@ -51,7 +51,7 @@ class DPF:
         """
         pass
 
-    def train_motion_model(self):
+    def train_motion_model(self, mode=0, phrase=None, dynamics_model_path=None):
         """ Train the motion model f and g.
         
         :return:
@@ -61,9 +61,10 @@ class DPF:
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         state_step_sizes = self.state_step_sizes_
-        mode = self.trainparam['train_motion_model_mode']
 
         motion_model = self.motion_model
+        if mode == 1 and phrase == 1:
+            motion_model.load_state_dict(torch.load(dynamics_model_path))
         
         log_dir = 'log/motion_model/mode_{}/'.format(mode)
         if os.path.exists(log_dir):
@@ -128,7 +129,8 @@ class DPF:
                                                self.stds,
                                                self.means,
                                                state_step_sizes,
-                                               mode)
+                                               mode,
+                                               phrase)
                 loss = motion_model.loss
 
                 # compute gradient and do SGD step
@@ -142,8 +144,14 @@ class DPF:
                     print("Epoch:{}, Iteration:{}, loss:{}".format(epoch, niter, loss))
                     writer.add_scalar('train/loss', loss, niter)
                 if niter % 1000 == 0:
-                    torch.save(motion_model.state_dict(), save_dir+'motion_model_' + repr(niter) + '.pth')
-        torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
+                    if mode == 1 and phrase == 0:
+                        torch.save(motion_model.state_dict(), save_dir+'dynamic_model_' + repr(niter) + '.pth')
+                    else:
+                        torch.save(motion_model.state_dict(), save_dir+'motion_model_' + repr(niter) + '.pth')
+        if mode == 1 and phrase == 0:
+            torch.save(motion_model.state_dict(), save_dir+'dynamic_model.pth')
+        else:
+            torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
 
 
     def train_particle_proposer(self):
