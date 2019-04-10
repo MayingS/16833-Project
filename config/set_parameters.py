@@ -12,7 +12,8 @@ class Params:
             'seq_length': 20,
             'learning_rate': 0.0003,
             'dropout_keep_ratio': 0.3,
-            'particle_num': 100
+            'particle_num': 100,
+            'train_motion_model_mode':0
         }
         self.test = {
             'particle_num': 1000
