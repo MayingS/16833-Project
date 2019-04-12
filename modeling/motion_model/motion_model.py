@@ -82,6 +82,6 @@ class MotionModel(nn.Module):
         # Compute distance between each particle state and ground truth state
         dists = square_distance(moved_particles, states, state_step_sizes)
         # Compute min square loss
-        mse_loss = torch.mean(dist_probs)
+        mse_loss = torch.mean(dists)
         
         return mse_loss
