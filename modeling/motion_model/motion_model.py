@@ -20,7 +20,7 @@ class MotionModel(nn.Module):
 
     @property
     def loss(self):
-        return self.loss
+        return self._loss
 
     def forward(self, actions, particles, states, stds, means, state_step_sizes, mode, phrase=None):
         """
@@ -44,7 +44,7 @@ class MotionModel(nn.Module):
             new_theta = wrap_angle(particles[:, :, 2:3] + noisy_actions[:, :, 2:3])
             moved_particles = torch.cat((new_x, new_y, new_theta), dim=-1)
     	    # Build loss
-            self.loss = self.build_mle_loss(moved_particles,
+            self._loss = self.build_mle_loss(moved_particles,
     					states,
     					state_step_sizes)
         
@@ -52,14 +52,14 @@ class MotionModel(nn.Module):
             if phrase == 0:
                 moved_particles = self.dynamics_model(noisy_actions.detach(), particles, state_step_sizes, stds, means)
                 # Build loss
-                self.loss = self.build_mse_loss(moved_particles,
+                self._loss = self.build_mse_loss(moved_particles,
                                                 states,
                                                 state_step_sizes)
 
             elif phrase == 1:
                 moved_particles = self.dynamics_model(noisy_actions, particles, state_step_sizes, stds, means)
                 # Build loss
-                self.loss = self.build_mle_loss(moved_particles,
+                self._loss = self.build_mle_loss(moved_particles,
                                                 states,
                                                 state_step_sizes)
 
