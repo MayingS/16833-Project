@@ -90,7 +90,7 @@ class DynamicsModel(nn.Module):
           particles_input: tensor of size (batch_size, num_particles, 4) with 
                            channels (x, y, cos(theta), sin(theta))
         """
-        norm_pos = torch.zeros(particles.size()).float
+        norm_pos = torch.zeros(particles.size()).float()
         for i in range(2):
             norm_pos[:, :, i] = (particles[:, :, i] - means["s"][i]) / stds["s"][i]
         norm_pos = norm_pos[:, :, :2] 
