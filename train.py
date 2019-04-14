@@ -55,6 +55,8 @@ def main():
     sta_mean = np.mean(sta, axis=0)
     sta_mean[2] = 0
     sta_std = np.std(sta - sta_mean, axis=tuple(range(len(sta.shape) - 1)))
+    sta_min = np.min(sta, axis=0)
+    sta_max = np.max(sta, axis=0)
 
     act_mean = np.mean(act, axis=0)
     act_mean[2] = 0
@@ -78,7 +80,8 @@ def main():
     train_dataset = DPFDataset(sta[:split_ind], obs[:split_ind], act[:split_ind])
     eval_dataset = DPFDataset(sta[split_ind:], obs[split_ind:], act[split_ind:])
 
-    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis, state_step_sizes=state_step_sizes)
+    dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis,
+              state_step_sizes_=state_step_sizes, state_min=sta_min, state_max=sta_max)
     # test train_likelihood_estimator
     # dpf.train_likelihood_estimator()
     # test train_motion_model

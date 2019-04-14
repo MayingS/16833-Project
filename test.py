@@ -69,6 +69,8 @@ def main():
     sta_mean = np.mean(train_sta, axis=0)
     sta_mean[2] = 0
     sta_std = np.std(train_sta - sta_mean, axis=tuple(range(len(train_sta.shape) - 1)))
+    sta_min = np.min(train_sta, axis=0)
+    sta_max = np.max(train_sta, axis=0)
 
     act_mean = np.mean(train_act, axis=0)
     act_mean[2] = 0
@@ -98,12 +100,13 @@ def main():
             pin_memory=True)
 
     # create the whole model instance
-    dpf = DPF(means=means, stds=stds)
+    dpf = DPF(eval_set=eval_dataset, means=means, stds=stds, visualize=args.visualize,
+              state_step_sizes_=state_step_sizes, state_min=sta_min, state_max=sta_max)
 
     # load the test data and create the dataset
     sta, obs, act = make_dataset(test_file)
     obs = (obs - obs_mean) / obs_std
-    test_dataset = DPFDataset(sta, obs, act)
+    test_dataset = DPFDataset(sta, obs, act, train=False)
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=32,
@@ -121,7 +124,7 @@ def main():
     motion_model = motion.MotionModel()
     observation_encoder.load_state_dict(torch.load(observation_encoder_path))
     likelihood_estimator.load_state_dict(torch.load(likelihood_estimator_path))
-    motion_model.load_state_dict(torch.load(args.motion_model_path))
+    motion_model.load_state_dict(torch.load(motion_model_path))
 
     dpf.observation_encoder = observation_encoder.double()
     dpf.likelihood_estimator = likelihood_estimator.double()
@@ -130,11 +133,12 @@ def main():
     if not os.path.exists(vis_outdir):
         os.path.makedirs(vis_outdir)
 
-    test(dpf, test_loader, args.visualize, args.vis_outdir)
-    test_motion_model(val_loader, motion_model, args.vis_outdir)
+    # test_measurement(dpf, val_loader, args.visualize, args.vis_outdir)
+    # test_motion_model(val_loader, motion_model, args.vis_outdir)
+    test_connect_model(dpf, test_loader, args.visualize, args.vis_outdir)
 
 
-def test(dpf, test_loader, vis=False, vis_outdir=None):
+def test_measurement(dpf, test_loader, vis=False, vis_outdir=None):
     """ Test the model given the test data
 
     Args:
@@ -195,6 +199,23 @@ def test_motion_model(val_loader, motion_model, vis_outdir):
         plot_motion_model('nav01', vis_outdir, particles, states, moved_particles)
 
         break
+
+
+def test_connect_model(dpf, test_loader, vis=False, vis_outdir=None):
+    for batch_id, (s, o, a) in enumerate(test_loader):
+        dpf.observation_encoder.eval()
+        dpf.likelihood_estimator.eval()
+        dpf.motion_model.eval()
+
+        particle_num = sp.Params().test['particle_num']
+        if dpf.use_cuda:
+            s = s.cuda()
+            o = o.cuda()
+            a = a.cuda()
+
+        particle_list, particle_probs_list, pred_state = dpf.connect_modules(particle_num, s, o, a, motion_mode=0, phrase=None)
+        plot_particle_filter('nav01', particle_list, particle_probs_list, pred_state, s, save_image=vis, outdir=vis_outdir, batch=batch_id)
+
 
 
 
