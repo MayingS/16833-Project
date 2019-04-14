@@ -18,12 +18,15 @@ from tensorboardX import SummaryWriter
 
 
 class DPF:
-    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False, state_step_sizes_=None):
+    def __init__(self, train_set=None, eval_set=None, means=None, stds=None, visualize=False,
+                 state_step_sizes_=None, state_min=None, state_max=None):
         self.train_set = train_set
         self.eval_set = eval_set
         self.means = means
         self.stds = stds
         self.state_step_sizes_ = state_step_sizes_
+        self.state_min = state_min
+        self.state_max = state_max
         self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
@@ -44,12 +47,108 @@ class DPF:
         self.log_freq = 10  # Steps
         self.test_freq = 2  # Epoch
 
-    def connect_modules(self):
-        """ Connect all the modules together to form the whole DPF system
-        
-        :return:
+    def particles_to_state(self, particle_list, particle_probs_list):
+        """ Get predicted state from the particles
+
+        Args:
+          particle_list: Tensor with size (N, T, particle_num, 3), containing the particles at different time step
+          particle_probs_list: Tensor with size (N, T, particle_num), corresponds to the particle probabilities
+        Returns:
+          Tensor with size (N, T, 4), each state is 4-dim with (x, y, cos(theta), sin(theta))
         """
-        pass
+        particle_probs_list = particle_probs_list.view(particle_probs_list.size(0), particle_probs_list.size(1),
+                                                       particle_probs_list.size(2), 1)
+        mean_position = torch.sum(particle_probs_list.repeat(1, 1, 1, 2)
+                                  * particle_list[:, :, :, :2], 2)
+        mean_orientation = torch.atan2(
+            torch.sum(particle_probs_list * torch.cos(particle_list[:, :, :, 2:]), 2),
+            torch.sum(particle_probs_list * torch.sin(particle_list[:, :, :, 2:]), 2))
+        return torch.cat([mean_position, mean_orientation], 2)
+
+    def connect_modules(self, particle_num, sta, obs, act, motion_mode=0, phrase=None):
+        """ Connect all the modules together to form the whole DPF system
+
+        Args:
+          sta: Tensor with size (N, T, 3), states
+          obs: Tensor with size (N, T, 3, H, W), observations
+          act: Tensor with size (N, T, 3), actions
+        Returns:
+          particle_list: Tensor with size (N, T, particle_num, 3), particles at different time step
+          particle_probs_list: Tensor with size (N, T, particle_num),
+                               the particle probabilities at different time step
+        """
+        propose_ratio = self.globalparam['propose_ratio']
+        # initialize particles
+        # initial particles: (30, 1000, 3)
+        if self.globalparam['init_with_true_state']:
+            # tracking with known initial state
+            initial_particles = sta[:, 0:1, :].repeat(1, particle_num, 1).float()
+        else:
+            # global localization
+            if self.globalparam['use_proposer']:
+                # propose particles from observations
+                # TODO, particle proposer
+                pass
+            else:
+                # sample particles randomly
+                x = torch.empty(sta.size(0), particle_num, 1).uniform_(self.state_min[0], self.state_max[0])
+                y = torch.empty(sta.size(0), particle_num, 1).uniform_(self.state_min[1], self.state_max[1])
+                theta = torch.empty(sta.size(0), particle_num, 1).uniform_(self.state_min[2], self.state_max[2])
+                initial_particles = torch.cat((x, y, theta), -1)
+        # shape (30, 1000)
+        initial_particle_probs = torch.ones(sta.size(0), particle_num) / particle_num
+
+        particles = initial_particles
+        particle_probs = initial_particle_probs
+        particle_list = particles.view(particles.size(0), -1, particle_num, 3)
+        particle_probs_list = particle_probs.view(particles.size(0), -1, particle_num)
+        for t in range(sta.size(1)):
+            propose_num = int(particle_num * (propose_ratio ** (t+1)))
+            resample_num = particle_num - propose_num
+
+            if propose_ratio < 1.0:
+                if not initial_particle_probs:
+                    # resample, shape (N, resample_num, 3)
+                    particles = self.resampling(particles, particle_probs, resample_num)
+                # motion update
+                particles = self.motion_model(act[:, t:t+1, :].float(),
+                                              particles.float(),
+                                              sta[:, t:t+1, :].float(),
+                                              self.stds,
+                                              self.means,
+                                              self.state_step_sizes_,
+                                              motion_mode,
+                                              phrase)
+                # measurement update
+                # get shape (N, 1, resample_num)
+                particle_probs = self.get_likelihood(particles.double(), obs[:, t:t+1, :, :, :]).float()
+                # (N, resample_num)
+                particle_probs = particle_probs.squeeze()
+
+            if propose_ratio > 0:
+                # TODO, particle proposer
+                pass
+
+            if propose_ratio == 1.0:
+                # TODO, particle proposer
+                pass
+            elif propose_ratio > 0:
+                # TODO, particle proposer
+                pass
+
+            # normalize probabilities
+            particle_probs /= torch.sum(particle_probs, dim=1, keepdim=True)
+            particle_list = torch.cat((particle_list,
+                                      particles.view(particles.size(0), 1, particles.size(1), particles.size(2))),
+                                      1)
+            particle_probs_list = torch.cat((particle_probs_list,
+                                            particle_probs.view(particle_probs.size(0), 1,
+                                                                particle_probs.size(1))),
+                                            1)
+            pred_state = self.particles_to_state(particle_list, particle_probs_list)
+
+        return particle_list, particle_probs_list, pred_state
+
 
     def train_motion_model(self, mode=0, phrase=None, dynamics_model_path=None):
         """ Train the motion model f and g.
@@ -377,37 +476,37 @@ class DPF:
         """ Process the data input and get the model output
 
         Args:
-          sta: Tensor with size (N, T, 3), states
-          obs: Tensor with size (N, T, 3, H, W), observations
+          sta: Tensor with size (N, sta_num, 3), states
+          obs: Tensor with size (N, obs_num, 3, H, W), observations
         Returns:
-            w: Tensor with size (N, T, T).
+            w: Tensor with size (N, obs_num, sta_num).
                The diagonal entries are likelihood of observations at their states.
                Other entries are likelihood of observations not at their states.
         """
-        # obs (32, 20, 3, 24, 24) -> (32*20, 3, 24, 24)
+        # obs (32, obs_num, 3, 24, 24) -> (32*obs_num, 3, 24, 24)
         o = obs.view(-1, 3, 24, 24)
         e = self.observation_encoder(o)
-        # get e (32*20, 128)
+        # get e (32*obs_num, 128)
         # get all the combinations of states and observations
-        # -> (32, 20, 128)
+        # -> (32, obs_num, 128)
         e = e.view(obs.size()[0], obs.size()[1], -1)
-        # -> (32, 20, 20, 128)
+        # -> (32, obs_num, sta_num, 128)
         e = e.view(obs.size()[0], obs.size()[1], 1, e.size()[2]).repeat(1, 1, sta.size()[1], 1)
-        # sta (32, 20, 3) -> (32, 20, 4)
+        # sta (32, sta_num, 3) -> (32, sta_num, 4)
         s = torch.cat(((sta[:, :, :2] - torch.from_numpy(self.means['s'])[:2]) / torch.from_numpy(self.stds['s'])[:2],
                        torch.cos(sta[:, :, 2:3]), torch.sin(sta[:, :, 2:3])), -1)
-        # -> (32, 20, 20, 4)
+        # -> (32, obs_num, sta_num, 4)
         s = s.view(s.size()[0], 1, s.size()[1], s.size()[2]).repeat(1, obs.shape[1], 1, 1)
         # get all the combinations of states and observations
-        # cat_input (32, 20, 20, 132)
+        # cat_input (32, obs_num, sta_num, 132)
         cat_input = torch.cat((e, s), -1)
-        # -> (32*20*20, 132)
+        # -> (32*obs_num*sta_num, 132)
         cat_input = cat_input.view(-1, cat_input.size()[-1])
 
-        # get w (32*20*20, 1)
+        # get w (32*obs_num*sta_num, 1)
         w = self.likelihood_estimator(cat_input)
-        # -> (32, 20, 20)
-        w = w.view(sta.size()[0], sta.size()[1], sta.size()[1])
+        # -> (32, obs_num, sta_num)
+        w = w.view(sta.size()[0], obs.size()[1], sta.size()[1])
 
         return w
 
@@ -456,7 +555,43 @@ class DPF:
 
         :return:
         """
-        pass
+        batch_size = self.trainparam['batch_size']
+        epochs = self.trainparam['epochs']
+        lr = self.trainparam['learning_rate']
+
+        self.observation_encoder = self.observation_encoder.double()
+        self.likelihood_estimator = self.likelihood_estimator.double()
+        if self.use_cuda:
+            self.observation_encoder = self.observation_encoder.cuda()
+            self.likelihood_estimator = self.likelihood_estimator.cuda()
+
+        train_loader = torch.utils.data.DataLoader(
+            self.train_set,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True,
+            sampler=None)
+        val_loader = torch.utils.data.DataLoader(
+            self.eval_set,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.globalparam['workers'],
+            pin_memory=True)
+
+        niter = 0
+        for epoch in range(epochs):
+            self.motion_model.train()
+            self.observation_encoder.train()
+            self.likelihood_estimator.train()
+
+            for batch_id, (sta, obs, act) in enumerate(train_loader):
+                if self.use_cuda:
+                    sta = sta.cuda()
+                    obs = obs.cuda()
+                    act = act.cuda()
+                self.connect_modules(sta, obs, act)
+
 
     def predict(self):
         """ Predict the output given the trained model.
@@ -464,3 +599,6 @@ class DPF:
         :return:
         """
         pass
+
+
+
