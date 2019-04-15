@@ -140,14 +140,6 @@ def square_distance(s_t, s, state_step_sizes=np.array([5,5,5])):
         dist += (diff / state_step_sizes[i]) ** 2
     return dist
 
-def batch_statistics(batch):
-    """ Get statistics of batch of states
-    Args: 
-      batch: Tensor (N, 3), batch of states
-    """
-
-    pass
-
 if __name__ == '__main__':
     states, observations, actions = make_dataset('data/100s/nav01_train.npz')
     D = DPFDataset(states, observations, actions)
