@@ -6,9 +6,12 @@ import config.set_parameters as sp
 
 
 class DPFDataset(data.Dataset):
-    def __init__(self, states, observations, actions):
+    def __init__(self, states, observations, actions, train=True):
         params = sp.Params()
-        self.seq_length = params.train['seq_length']
+        if train:
+            self.seq_length = params.train['seq_length']
+        else:
+            self.seq_length = params.test['seq_length']
         self.states = states
         self.observations = observations
         self.actions = actions
