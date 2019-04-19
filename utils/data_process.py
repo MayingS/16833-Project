@@ -120,8 +120,8 @@ def make_dataset(filename):
     return states, observations, actions
 
 
-def square_distance(s_t, s, state_step_sizes=np.array([5,5,5])):
-    """ Calcuate distances between two sets of states for particle proposer backprog
+def square_distance(s_t, s, state_step_sizes):
+    """ Calcuate distances between two sets of states
     Args:
       s_t: ground truth states (N, 3)
       s: proposed states (N, 3)
@@ -139,6 +139,33 @@ def square_distance(s_t, s, state_step_sizes=np.array([5,5,5])):
         # add up scaled squared distance
         dist += (diff / state_step_sizes[i]) ** 2
     return dist
+
+def square_distance_proposer(s_t, s, num_particles, state_step_sizes):
+    """ Calcuate distances between two sets of states for particle proposer backprog
+    Args:
+      s_t: ground truth states (N, 3)
+      s: proposed states (N * num_particles, 3)
+      state_step_size: numpy array (3,), step of each state dim
+    Returns:
+      dist: distance between two states
+    """
+    s_t_rep = []
+    s = s.double()
+    s_t = s_t.view(-1,3)
+    for i in range(s_t.shape[0]):
+      s_t_rep.append((s_t[i,:].unsqueeze(0)).repeat(num_particles, 1))
+    s_t = torch.cat(s_t_rep, dim=0)
+
+    dist = 0.0
+    for i in range(s_t.shape[-1]):
+        # compute difference
+        diff = s_t[..., i] - s[..., i]
+        # wrap angle for theta
+        if i == 2:
+            diff = wrap_angle(diff)
+        # add up scaled squared distance
+        dist += (diff / state_step_sizes[i]) ** 2
+
 
 if __name__ == '__main__':
     states, observations, actions = make_dataset('data/100s/nav01_train.npz')

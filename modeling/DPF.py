@@ -43,6 +43,7 @@ class DPF:
         self.end2end = False
         # self.use_cuda = torch.cuda.is_available()
         self.use_cuda = False
+        self.use_proposer = False
 
         self.log_freq = 10  # Steps
         self.test_freq = 2  # Epoch
@@ -319,13 +320,11 @@ class DPF:
                 new_particles = self.propose_particle(encoding, \
                     particle_num, state_mins, state_maxs)
                 
-                # sq_dist = data_process.square_distance(sta, new_particles)
-                # activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
-                #      * torch.exp(- sq_dist / (2.0 * std ** 2))
-                # loss = 1e-16 + torch.sum(activations, -1)
-                # loss = torch.mean(-torch.log(loss))
-
-                loss = motion.build_mle_loss(new_particles, sta, self.state_step_sizes_)
+                sq_dist = data_process.square_distance_proposer(sta, new_particles)
+                activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
+                     * torch.exp(- sq_dist / (2.0 * std ** 2))
+                loss = 1e-16 + torch.sum(activations, -1)
+                loss = torch.mean(-torch.log(loss))
 
                 if niter % self.log_freq == 0:
                     print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss.item()))
