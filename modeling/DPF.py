@@ -102,18 +102,22 @@ class DPF:
         particle_probs = initial_particle_probs
         particle_list = particles.view(particles.size(0), -1, particle_num, 3)
         particle_probs_list = particle_probs.view(particles.size(0), -1, particle_num)
-        for t in range(sta.size(1)):
+        for t in range(1, sta.size(1)):
             propose_num = int(particle_num * (propose_ratio ** (t+1)))
             resample_num = particle_num - propose_num
 
             if propose_ratio < 1.0:
-                if not initial_particle_probs:
+                #if not initial_particle_probs:
                     # resample, shape (N, resample_num, 3)
-                    particles = self.resampling(particles, particle_probs, resample_num)
+                #particles = self.resampling(particles, particle_probs, resample_num)
                 # motion update
-                particles = self.motion_model(act[:, t:t+1, :].float(),
+                act_ = act.unsqueeze(2)
+                sta_ = sta.unsqueeze(2)
+                act_ = act_.repeat(1, 1, particle_num, 1)
+                sta_ = sta_.repeat(1, 1, particle_num, 1)
+                particles = self.motion_model(act_[:, t:t+1, :, :].view(-1, particle_num, 3).float(),
                                               particles.float(),
-                                              sta[:, t:t+1, :].float(),
+                                              sta_[:, t:t+1, :, :].view(-1, particle_num, 3).float(),
                                               self.stds,
                                               self.means,
                                               self.state_step_sizes_,
