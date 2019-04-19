@@ -253,7 +253,7 @@ class DPF:
             torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
 
 
-    def train_particle_proposer(self):
+    def train_particle_proposer(self, state_mins, state_maxs):
         """ Train the particle proposer k.
         :return:
         """
@@ -319,13 +319,13 @@ class DPF:
                 new_particles = self.propose_particle(encoding, \
                     particle_num, state_mins, state_maxs)
                 
-                sq_dist = data_process.square_distance(sta, new_particles)
+                # sq_dist = data_process.square_distance(sta, new_particles)
+                # activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
+                #      * torch.exp(- sq_dist / (2.0 * std ** 2))
+                # loss = 1e-16 + torch.sum(activations, -1)
+                # loss = torch.mean(-torch.log(loss))
 
-                activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
-                     * torch.exp(- sq_dist / (2.0 * std ** 2))
-
-                loss = 1e-16 + torch.sum(activations, -1)
-                loss = torch.mean(-torch.log(loss))
+                loss = motion.build_mle_loss(new_particles, sta, self.state_step_sizes_)
 
                 if niter % self.log_freq == 0:
                     print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss.item()))
