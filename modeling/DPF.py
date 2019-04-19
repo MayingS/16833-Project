@@ -488,7 +488,7 @@ class DPF:
                Other entries are likelihood of observations not at their states.
         """
         # obs (32, obs_num, 3, 24, 24) -> (32*obs_num, 3, 24, 24)
-        o = obs.view(-1, 3, 24, 24)
+        o = obs.permute(0, 1, 4, 2, 3)
         e = self.observation_encoder(o)
         # get e (32*obs_num, 128)
         # get all the combinations of states and observations
