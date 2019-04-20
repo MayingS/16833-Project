@@ -80,6 +80,8 @@ class DPF:
                                the particle probabilities at different time step
         """
         propose_ratio = self.globalparam['propose_ratio']
+        N = sta.shape[0]
+        encoding = self.observation_encoder(obs.reshape(-1, 24, 24, 3).permute(0,3,1,2))
         # initialize particles
         # initial particles: (30, 1000, 3)
         if self.globalparam['init_with_true_state']:
@@ -89,8 +91,7 @@ class DPF:
             # global localization
             if self.globalparam['use_proposer']:
                 # propose particles from observations
-                # TODO, particle proposer
-                pass
+                initial_particles = self.propose_particle(encoding[0:N, ...], particle_num, self.state_min, self.state_max)
             else:
                 # sample particles randomly
                 x = torch.empty(sta.size(0), particle_num, 1).uniform_(self.state_min[0], self.state_max[0])
@@ -132,15 +133,25 @@ class DPF:
                 particle_probs = particle_probs.squeeze()
 
             if propose_ratio > 0:
-                # TODO, particle proposer
-                pass
+                proposed_particles = self.propose_particles(encoding[t*N:(t+1*N), ...],\
+                     propose_num , self.state_min, self.state_max)
+                proposed_particle_probs = torch.ones([N, propose_num])
 
             if propose_ratio == 1.0:
-                # TODO, particle proposer
-                pass
-            elif propose_ratio > 0:
-                # TODO, particle proposer
-                pass
+                # all proposed particles
+                particles = proposed_particles
+                particle_probs = proposed_particle_probs
+
+            elif propose_ratio == 0:
+                # all standard particles
+                particles = particles
+                particle_probs = particle_probs
+            
+            else:
+                particle_probs *= (resample_num / particle_num) / torch.sum(particle_probs, dim=1)
+                proposed_particle_probs *= (propose_num / particle_num) / torch.sum(proposed_particle_probs, dim=1)
+                particles = torch.cat([particles, proposed_particles], axis=1) # dimension is wrong!
+                particle_probs = torch.cat([particle_probs, proposed_particle_probs], axis=1) # dimension is wrong!
 
             # normalize probabilities
             particle_probs /= torch.sum(particle_probs, dim=1, keepdim=True)
@@ -264,7 +275,8 @@ class DPF:
         :return:
         """
         batch_size = self.trainparam['batch_size']
-        epochs = self.trainparam['epochs']
+        # epochs = self.trainparam['epochs']
+        epochs = 500
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         std = 0.2
@@ -323,7 +335,7 @@ class DPF:
                 encoding = self.observation_encoder(obs)
                 new_particles = self.propose_particle(encoding, \
                     particle_num, self.state_min, self.state_max)
-                    
+                     
                 dists = data_process.square_distance_proposer(sta, new_particles, particle_num, self.state_step_sizes_)
                 # Transform distances to probabilities sampled from a normal distribution
                 dist_probs = (1 / float(new_particles.size(0))) / ((2 * np.pi * std ** 2)**0.5) * torch.exp(-dists / (2.0 * std ** 2))
@@ -342,15 +354,8 @@ class DPF:
 
                 niter += 1
 
-                plot_proposer('nav01', "./output/test_" + str(epoch),\
-                     new_particles[:particle_num, :].cpu().detach().numpy(), sta[0,0,:].cpu().numpy())
-
-            
-            # # Validation
-            # if epoch % self.test_freq == 0:
-                # loss_val = self.eval_particle_propser(val_loader)
-                # print('Epoch {}: Val loss: {}'.format(epoch, loss_val))
-                # log_writer.add_scalar('val/loss', loss_val, niter)
+            plot_proposer('nav01', "./output/test_" + str(epoch),\
+                    new_particles[:particle_num, :].cpu().detach().numpy(), sta[0,0,:].cpu().numpy())
 
             if epoch % 3 == 0:
                 save_path = os.path.join(
