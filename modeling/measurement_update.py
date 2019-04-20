@@ -36,7 +36,7 @@ class ObservationEncoder(nn.Module):
 
 
 class ParticleProposer(nn.Module):
-    def __init__(self, keepRatio=0.3):
+    def __init__(self, keepRatio=0.1):
         super(ParticleProposer, self).__init__()
         self.proposer = nn.Sequential(
             nn.Linear(128, 128),

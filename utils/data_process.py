@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import torch.utils.data as data
+import torch
 
 import config.set_parameters as sp
 
@@ -165,6 +166,7 @@ def square_distance_proposer(s_t, s, num_particles, state_step_sizes):
             diff = wrap_angle(diff)
         # add up scaled squared distance
         dist += (diff / state_step_sizes[i]) ** 2
+    return dist
 
 
 if __name__ == '__main__':

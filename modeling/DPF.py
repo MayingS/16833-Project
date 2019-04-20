@@ -8,6 +8,7 @@ import modeling.resampling as resample
 import config.set_parameters as sp
 import utils.data_process as data_process
 from utils.visualize import *
+from utils.visualize_proposer import *
 
 import torch
 import torch.utils
@@ -30,8 +31,8 @@ class DPF:
         self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
-        self.observation_encoder = measurement.ObservationEncoder()
-        self.particle_proposer = measurement.ParticleProposer()
+        self.observation_encoder = measurement.ObservationEncoder().cuda()
+        self.particle_proposer = measurement.ParticleProposer().cuda()
         self.likelihood_estimator = measurement.ObservationLikelihoodEstimator()
         self.resampling = resample.particle_resampling
 
@@ -258,7 +259,7 @@ class DPF:
             torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
 
 
-    def train_particle_proposer(self, state_mins, state_maxs):
+    def train_particle_proposer(self):
         """ Train the particle proposer k.
         :return:
         """
@@ -267,7 +268,7 @@ class DPF:
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         std = 0.2
-        encoder_checkpoint = " "
+        encoder_checkpoint = "encoder_checkpoint_570.pth"
 
         log_dir = 'particle_proposer_log'
         if os.path.exists(log_dir):
@@ -278,7 +279,7 @@ class DPF:
         if not os.path.exists(check_point_dir):
             os.makedirs(check_point_dir)
 
-        optimizer = torch.optim.Adam(self.particle_proposer.params(), lr)
+        optimizer = torch.optim.Adam(self.particle_proposer.parameters(), lr)
 
         # use trained Observation encoder to get encodings of observation
         if not self.end2end:
@@ -316,29 +317,34 @@ class DPF:
             self.particle_proposer.train()
 
             for i, (sta, obs, act) in enumerate(train_loader):
-                if self.use_cuda:
-                    obs = obs.cuda()
-                    sta = sta.cuda()
+                obs = obs.cuda().reshape(-1, 24, 24, 3).permute(0,3,1,2).float()
+                sta = sta.cuda()
 
                 encoding = self.observation_encoder(obs)
                 new_particles = self.propose_particle(encoding, \
-                    particle_num, state_mins, state_maxs)
-                
-                sq_dist = data_process.square_distance_proposer(sta, new_particles)
-                activations = (1.0 / particle_num) / np.sqrt(2 * np.pi * std ** 2)\
-                     * torch.exp(- sq_dist / (2.0 * std ** 2))
-                loss = 1e-16 + torch.sum(activations, -1)
-                loss = torch.mean(-torch.log(loss))
+                    particle_num, self.state_min, self.state_max)
+                    
+                dists = data_process.square_distance_proposer(sta, new_particles, particle_num, self.state_step_sizes_)
+                # Transform distances to probabilities sampled from a normal distribution
+                dist_probs = (1 / float(new_particles.size(0))) / ((2 * np.pi * std ** 2)**0.5) * torch.exp(-dists / (2.0 * std ** 2))
+                # Add e for numerical stability
+                e = 1e-16
+                # Compute most likelihood estimate loss
+                mle_loss = torch.mean(-torch.log(e + torch.sum(dist_probs, dim=-1)))
 
                 if niter % self.log_freq == 0:
-                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), loss.item()))
-                    log_writer.add_scalar('train/loss', loss.item(), niter)
+                    print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), mle_loss.item()))
+                    log_writer.add_scalar('train/loss', mle_loss.item(), niter)
 
                 optimizer.zero_grad()
-                loss.backward()
+                mle_loss.backward()
                 optimizer.step()
 
                 niter += 1
+
+                plot_proposer('nav01', "./output/test_" + str(epoch),\
+                     new_particles[:particle_num, :].cpu().detach().numpy(), sta[0,0,:].cpu().numpy())
+
             
             # # Validation
             # if epoch % self.test_freq == 0:
@@ -346,7 +352,7 @@ class DPF:
                 # print('Epoch {}: Val loss: {}'.format(epoch, loss_val))
                 # log_writer.add_scalar('val/loss', loss_val, niter)
 
-            if epoch % 10 == 0:
+            if epoch % 3 == 0:
                 save_path = os.path.join(
                     check_point_dir, 'proposer_checkpoint_{}.pth'.format(epoch))
                 torch.save(self.particle_proposer.state_dict(), save_path)
