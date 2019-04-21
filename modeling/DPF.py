@@ -280,7 +280,7 @@ class DPF:
         lr = self.trainparam['learning_rate']
         particle_num = self.trainparam['particle_num']
         std = 0.2
-        encoder_checkpoint = "encoder_checkpoint_570.pth"
+        encoder_checkpoint = "encoder.pth"
 
         log_dir = 'particle_proposer_log'
         if os.path.exists(log_dir):
@@ -294,17 +294,15 @@ class DPF:
         optimizer = torch.optim.Adam(self.particle_proposer.parameters(), lr)
 
         # use trained Observation encoder to get encodings of observation
-        if not self.end2end:
-            if os.path.isfile(encoder_checkpoint):
-                checkpoint = torch.load(encoder_checkpoint)
-                self.observation_encoder.load_state_dict(checkpoint)
-                print("Check point loaded!")
-            else:
-                print("Invalid check point directory...")
+        if os.path.isfile(encoder_checkpoint):
+            checkpoint = torch.load(encoder_checkpoint)
+            self.observation_encoder.load_state_dict(checkpoint)
+            print("Check point loaded!")
+        else:
+            print("Invalid check point directory...")
 
         # freeze observation encoder
-        for p in self.observation_encoder.parameters():
-                    p.requires_grad = False
+        self.observation_encoder.eval()
 
         if self.use_cuda:
             self.observation_encoder.cuda()
@@ -312,19 +310,20 @@ class DPF:
         
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
-            batch_size=batch_size,
+            batch_size=1,
             shuffle=True,
             num_workers=self.globalparam['workers'],
             pin_memory=True,
             sampler=None)
         val_loader = torch.utils.data.DataLoader(
             self.eval_set,
-            batch_size=batch_size,
-            shuffle=False,
+            batch_size=1,
+            shuffle=True,
             num_workers=self.globalparam['workers'],
             pin_memory=True)
 
         niter = 0
+        propose_num = 1
         for epoch in range(epochs):
             self.particle_proposer.train()
 
@@ -334,9 +333,9 @@ class DPF:
 
                 encoding = self.observation_encoder(obs)
                 new_particles = self.propose_particle(encoding, \
-                    particle_num, self.state_min, self.state_max)
+                    propose_num, self.state_min, self.state_max)
                      
-                dists = data_process.square_distance_proposer(sta, new_particles, particle_num, self.state_step_sizes_)
+                dists = data_process.square_distance_proposer(sta, new_particles, propose_num, self.state_step_sizes_)
                 # Transform distances to probabilities sampled from a normal distribution
                 dist_probs = (1 / float(new_particles.size(0))) / ((2 * np.pi * std ** 2)**0.5) * torch.exp(-dists / (2.0 * std ** 2))
                 # Add e for numerical stability
@@ -344,7 +343,7 @@ class DPF:
                 # Compute most likelihood estimate loss
                 mle_loss = torch.mean(-torch.log(e + torch.sum(dist_probs, dim=-1)))
 
-                if niter % self.log_freq == 0:
+                if niter % 100 == 0:
                     print('Epoch {}/{}, Batch {}/{}: Train loss: {}'.format(epoch, epochs, i, len(train_loader), mle_loss.item()))
                     log_writer.add_scalar('train/loss', mle_loss.item(), niter)
 
@@ -353,15 +352,61 @@ class DPF:
                 optimizer.step()
 
                 niter += 1
+            
+            eval_encoding = self.observation_encoder(obs[0,...].unsqueeze(0))
+            eval_particles = self.propose_particle(eval_encoding, 1000, self.state_min, self.state_max)
+        
+            plot_proposer('nav01', "./output/train_" + str(epoch),\
+                    eval_particles[:1000, :].cpu().detach().numpy(), sta[0,0,...].cpu().numpy())
+            val_loss = self.eval_particle_proposer(val_loader, epoch)
 
-            plot_proposer('nav01', "./output/test_" + str(epoch),\
-                    new_particles[:particle_num, :].cpu().detach().numpy(), sta[0,0,:].cpu().numpy())
+            print('Epoch {}/{}: Validation loss: {}'.format(epoch, epochs, val_loss))
+            log_writer.add_scalar('val/loss', val_loss, epoch)
 
             if epoch % 3 == 0:
                 save_path = os.path.join(
                     check_point_dir, 'proposer_checkpoint_{}.pth'.format(epoch))
                 torch.save(self.particle_proposer.state_dict(), save_path)
                 print('Saved proposer to {}'.format(save_path))
+
+    def eval_particle_proposer(self, val_loader, epoch):
+        """ Eval the particle proposer
+
+        Args:
+          val_loader: Dataloader of val dataset
+        Return:
+          val_loss:
+        """
+        self.particle_proposer.eval()
+        
+        std = 0.2
+        mle_loss_total = 0.0
+        niter = 0
+        sta_eval = None
+        particles_eval = None
+        for i, (sta, obs, act) in enumerate(val_loader):
+            obs = obs.cuda().reshape(-1, 24, 24, 3).permute(0,3,1,2).float()
+            sta = sta.cuda()
+
+            encoding = self.observation_encoder(obs)
+            new_particles = self.propose_particle(encoding, \
+                1000, self.state_min, self.state_max)
+                    
+            dists = data_process.square_distance_proposer(sta.unsqueeze(0), new_particles, 1000, self.state_step_sizes_)
+            # Transform distances to probabilities sampled from a normal distribution
+            dist_probs = (1 / float(new_particles.size(0))) / ((2 * np.pi * std ** 2)**0.5) * torch.exp(-dists / (2.0 * std ** 2))
+            # Add e for numerical stability
+            e = 1e-16
+            # Compute most likelihood estimate loss
+            mle_loss = torch.mean(-torch.log(e + torch.sum(dist_probs, dim=-1)))
+            mle_loss_total += mle_loss.item()
+            niter += 1
+            sta_eval = sta
+            particles_eval = new_particles
+        plot_proposer('nav01', "./output/eval_" + str(epoch),\
+                    particles_eval[:1000,...].cpu().detach().numpy(), sta_eval[0,0,...].cpu().numpy())
+
+        return mle_loss_total / niter
     
     def propose_particle(self, encoding, num_particles, state_mins, state_maxs):
         """
