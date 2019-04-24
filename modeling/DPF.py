@@ -310,20 +310,20 @@ class DPF:
         
         train_loader = torch.utils.data.DataLoader(
             self.train_set,
-            batch_size=1,
+            batch_size=batch_size,
             shuffle=True,
             num_workers=self.globalparam['workers'],
             pin_memory=True,
             sampler=None)
         val_loader = torch.utils.data.DataLoader(
             self.eval_set,
-            batch_size=1,
+            batch_size=batch_size,
             shuffle=True,
             num_workers=self.globalparam['workers'],
             pin_memory=True)
 
         niter = 0
-        propose_num = 1
+        propose_num = 100
         for epoch in range(epochs):
             self.particle_proposer.train()
 
@@ -377,8 +377,6 @@ class DPF:
         Return:
           val_loss:
         """
-        self.particle_proposer.eval()
-        
         std = 0.2
         mle_loss_total = 0.0
         niter = 0
@@ -418,8 +416,10 @@ class DPF:
         Returns:
             proposed_particles: tensor of new proposed states: (N, )
         """
-        # encoding = Variable(encoding, requires_grad=False)
-        encoding_rep = encoding.repeat(num_particles, 1)
+        encoding_rep = []
+        for i in range(encoding.shape[0]):
+            encoding_rep.append((encoding[i,:].unsqueeze(0)).repeat(num_particles, 1))
+        encoding_rep = torch.cat(encoding_rep, dim=0)
         proposed_particles = self.particle_proposer(encoding_rep)
 
         # transform states 4 dim to 3 dim
