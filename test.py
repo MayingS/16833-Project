@@ -14,15 +14,15 @@ def args_parse():
     parser = argparse.ArgumentParser('To test the models using test data')
     parser.add_argument(
         '--observation_encoder', help='the path of the trained observation encoder',
-        default='likelihood_estimator_checkpoint/encoder_checkpoint_570.pth'
+        default='models/encoder_checkpoint_620.pth'
     )
     parser.add_argument(
         '--likelihood_estimator', help='the path of the trained likelihood estimator',
-        default='likelihood_estimator_checkpoint/estimator_checkpoint_570.pth'
+        default='models/estimator_checkpoint_620.pth'
     )
     parser.add_argument(
         '--motion_model', help='the path of the trained motion_model',
-        default='model/motion_model/mode_0/motion_model.pth'
+        default='models/motion_model.pth'
     )
     parser.add_argument(
         '--data_dir', help='The directory of the data file.', default='data/100s'
@@ -106,7 +106,7 @@ def main():
     # load the test data and create the dataset
     sta, obs, act = make_dataset(test_file)
     obs = (obs - obs_mean) / obs_std
-    test_dataset = DPFDataset(sta, obs, act, train=False)
+    test_dataset = DPFDataset(sta, obs, act)
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=32,
@@ -128,6 +128,7 @@ def main():
 
     dpf.observation_encoder = observation_encoder.double()
     dpf.likelihood_estimator = likelihood_estimator.double()
+    dpf.motion_model = motion_model
 
     vis_outdir = args.vis_outdir
     if not os.path.exists(vis_outdir):

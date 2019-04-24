@@ -3,7 +3,7 @@ class Params:
         self.globalparam = {
             'min_obs_likelihood': 0.004,
             'workers': 4,
-            'init_with_true_state': True,
+            'init_with_true_state': False,
             'use_proposer': False,
             'propose_ratio': 0,
             'proposer_keep_ratio': 0.15

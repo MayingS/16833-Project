@@ -8,7 +8,7 @@ import modeling.resampling as resample
 import config.set_parameters as sp
 import utils.data_process as data_process
 from utils.visualize import *
-from utils.visualize_proposer import *
+#from utils.visualize_proposer import *
 
 import torch
 import torch.utils
@@ -31,8 +31,8 @@ class DPF:
         self.visualize = visualize
 
         self.motion_model = motion.MotionModel()
-        self.observation_encoder = measurement.ObservationEncoder().cuda()
-        self.particle_proposer = measurement.ParticleProposer().cuda()
+        self.observation_encoder = measurement.ObservationEncoder()
+        self.particle_proposer = measurement.ParticleProposer()
         self.likelihood_estimator = measurement.ObservationLikelihoodEstimator()
         self.resampling = resample.particle_resampling
 
@@ -112,7 +112,7 @@ class DPF:
             if propose_ratio < 1.0:
                 #if not initial_particle_probs:
                     # resample, shape (N, resample_num, 3)
-                #particles = self.resampling(particles, particle_probs, resample_num)
+                particles = self.resampling(particles, particle_probs, resample_num)
                 # motion update
                 act_ = act.unsqueeze(2)
                 sta_ = sta.unsqueeze(2)
