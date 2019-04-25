@@ -177,13 +177,13 @@ class DPF_e2e:
         os.makedirs(save_dir)
 
         if motion_model_path is not None:
-            self.motion_model = self.motion_model.load_state_dict(torch.load(motion_model_path))
+            self.motion_model.load_state_dict(torch.load(motion_model_path))
             self.motion_model = self.motion_model.float()
         if observation_encoder_path is not None:
-            self.observation_encoder = self.observation_encoder.load_state_dict(torch.load(observation_encoder_path))
+            self.observation_encoder.load_state_dict(torch.load(observation_encoder_path))
             self.observation_encoder = self.observation_encoder.float()
         if likelihood_estimator_path is not None:
-            self.likelihood_estimator = self.likelihood_estimator.load_state_dict(torch.load(likelihood_estimator_path))
+            self.likelihood_estimator.load_state_dict(torch.load(likelihood_estimator_path))
             self.likelihood_estimator = self.likelihood_estimator.float()
 
         if self.use_cuda:
