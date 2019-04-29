@@ -118,7 +118,7 @@ def plot_particle_filter(task, particle_list, particle_probs_list, pred_state, s
             if i < num_steps - 1:
                 ax.quiver(particle_list[s, i, :, 0], particle_list[s, i, :, 1],
                           np.cos(particle_list[s, i, :, 2]), np.sin(particle_list[s, i, :, 2]),
-                          particle_probs_list[s, i, :], cmap='viridis_r', clim=[.0, 2.0 / num_particles],
+                          particle_probs_list[s, i, :], cmap='viridis_r', clim=[.0, 0.2 / num_particles],
                           alpha=1.0,
                           **quiv_kwargs
                           )
