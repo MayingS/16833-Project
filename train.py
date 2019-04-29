@@ -23,7 +23,8 @@ def args_parse():
         '--visualize', help='To visualize the model output', default=False
     )
     parser.add_argument(
-        '--dynamics_model_path', help='Path to trained dynamics model', default='model/motion_model/mode_1/dynamic_model.pth'
+        '--dynamics_model_path', help='Path to trained dynamics model',
+        default='model/motion_model/mode_1/dynamic_model.pth'
     )
 
     args = parser.parse_args()
@@ -82,12 +83,13 @@ def main():
 
     dpf = DPF(train_set=train_dataset, eval_set=eval_dataset, means=means, stds=stds, visualize=vis,
               state_step_sizes_=state_step_sizes, state_min=sta_min, state_max=sta_max)
-    # test train_likelihood_estimator
-    # dpf.train_likelihood_estimator()
-    # test train_motion_model
+    # # test train_likelihood_estimator
+    dpf.train_likelihood_estimator()
+    # # test train_motion_model
     # dpf.train_motion_model(mode=0)
     # dpf.train_motion_model(mode=1, phrase=0)
-    # dpf.train_motion_model(mode=1, phrase=1, dynamics_model_path=args.dynamics_model_path)
+    dpf.train_motion_model(mode=1, phrase=1, dynamics_model_path=args.dynamics_model_path)
+    # dpf.train_particle_proposer()
 
 
 if __name__ == '__main__':

@@ -135,7 +135,7 @@ def main():
         os.makedirs(vis_outdir)
 
     # test_measurement(dpf, val_loader, args.visualize, args.vis_outdir)
-    # test_motion_model(val_loader, motion_model, args.vis_outdir)
+    # test_motion_model(val_loader, motion_model, args.vis_outdir, stds, means, state_step_sizes)
     test_connect_model(dpf, test_loader, args.visualize, args.vis_outdir)
 
 
@@ -168,7 +168,8 @@ def test_measurement(dpf, test_loader, vis=False, vis_outdir=None):
             for i in range(w.shape[0]):
                 plot_measurement(w[i], save_image=True, outdir=meas_vis_dir, batch=batch_id, ind=i)
 
-def test_motion_model(val_loader, motion_model, vis_outdir):
+
+def test_motion_model(val_loader, motion_model, vis_outdir, stds, means, state_step_sizes):
     """Test the motion model
     """
     particle_num = sp.Params().train['particle_num']
@@ -203,6 +204,15 @@ def test_motion_model(val_loader, motion_model, vis_outdir):
 
 
 def test_connect_model(dpf, test_loader, vis=False, vis_outdir=None):
+    """ Test the whole system
+
+    Args:
+      dpf: an instance of DPF class
+      test_loader: DataLoader for test data
+      vis: True or False, indicating whether to visualize model or not
+      vis_outdir: the output directory of the visualization result
+    Returns:
+    """
     for batch_id, (s, o, a) in enumerate(test_loader):
         dpf.observation_encoder.eval()
         dpf.likelihood_estimator.eval()
@@ -214,10 +224,12 @@ def test_connect_model(dpf, test_loader, vis=False, vis_outdir=None):
             o = o.cuda()
             a = a.cuda()
 
-        particle_list, particle_probs_list, pred_state = dpf.connect_modules(particle_num, s, o, a, motion_mode=0, phrase=None)
-        plot_particle_filter('nav01', particle_list, particle_probs_list, pred_state, s, save_image=vis, outdir=vis_outdir, batch=batch_id)
-
-
+        particle_list, particle_probs_list, pred_state = dpf.connect_modules(particle_num,
+                                                                             s, o, a,
+                                                                             motion_mode=0,
+                                                                             phrase=None)
+        plot_particle_filter('nav01', particle_list, particle_probs_list, pred_state, s,
+                             save_image=vis, outdir=vis_outdir, batch=batch_id)
 
 
 if __name__ == '__main__':

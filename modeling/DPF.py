@@ -110,8 +110,7 @@ class DPF:
             resample_num = particle_num - propose_num
 
             if propose_ratio < 1.0:
-                #if not initial_particle_probs:
-                    # resample, shape (N, resample_num, 3)
+                # resample, shape (N, resample_num, 3)
                 particles = self.resampling(particles, particle_probs, resample_num)
                 # motion update
                 act_ = act.unsqueeze(2)
@@ -165,7 +164,6 @@ class DPF:
             pred_state = self.particles_to_state(particle_list, particle_probs_list)
 
         return particle_list, particle_probs_list, pred_state
-
 
     def train_motion_model(self, mode=0, phrase=None, dynamics_model_path=None):
         """ Train the motion model f and g.
@@ -268,7 +266,6 @@ class DPF:
             torch.save(motion_model.state_dict(), save_dir+'dynamic_model.pth')
         else:
             torch.save(motion_model.state_dict(), save_dir+'motion_model.pth')
-
 
     def train_particle_proposer(self):
         """ Train the particle proposer k.
@@ -609,56 +606,4 @@ class DPF:
 
         likelihood = sum(likelihood_list) / len(likelihood_list)
         return likelihood
-
-    def train_e2e(self):
-        """ Train DPF end-to-end
-
-        :return:
-        """
-        batch_size = self.trainparam['batch_size']
-        epochs = self.trainparam['epochs']
-        lr = self.trainparam['learning_rate']
-
-        self.observation_encoder = self.observation_encoder.double()
-        self.likelihood_estimator = self.likelihood_estimator.double()
-        if self.use_cuda:
-            self.observation_encoder = self.observation_encoder.cuda()
-            self.likelihood_estimator = self.likelihood_estimator.cuda()
-
-        train_loader = torch.utils.data.DataLoader(
-            self.train_set,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=self.globalparam['workers'],
-            pin_memory=True,
-            sampler=None)
-        val_loader = torch.utils.data.DataLoader(
-            self.eval_set,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=self.globalparam['workers'],
-            pin_memory=True)
-
-        niter = 0
-        for epoch in range(epochs):
-            self.motion_model.train()
-            self.observation_encoder.train()
-            self.likelihood_estimator.train()
-
-            for batch_id, (sta, obs, act) in enumerate(train_loader):
-                if self.use_cuda:
-                    sta = sta.cuda()
-                    obs = obs.cuda()
-                    act = act.cuda()
-                self.connect_modules(sta, obs, act)
-
-
-    def predict(self):
-        """ Predict the output given the trained model.
-
-        :return:
-        """
-        pass
-
-
 
