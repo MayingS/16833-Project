@@ -134,7 +134,7 @@ def main():
     if not os.path.exists(vis_outdir):
         os.makedirs(vis_outdir)
 
-    # test_measurement(dpf, val_loader, args.visualize, args.vis_outdir)
+    # test_measurement(dpf, test_loader, args.visualize, args.vis_outdir)
     # test_motion_model(val_loader, motion_model, args.vis_outdir, stds, means, state_step_sizes)
     test_connect_model(dpf, test_loader, args.visualize, args.vis_outdir)
 
