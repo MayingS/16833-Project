@@ -71,7 +71,7 @@ def plot_motion_model(task, vis_outdir, particles, states, moved_particles):
 
     plt.gca().axis('off')
     plt.gca().set_aspect('equal')
-    plt.savefig(vis_outdir+'motion_model.png', transparent=True, dpi=600, frameon=False, facecolor='w', pad_inches=0.01)
+    plt.savefig(vis_outdir+'/motion_model.png', transparent=True, dpi=600, frameon=False, facecolor='w', pad_inches=0.01)
 
 
 def plot_particle_filter(task, particle_list, particle_probs_list, pred_state, sta,

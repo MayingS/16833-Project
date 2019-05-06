@@ -135,7 +135,7 @@ def main():
         os.makedirs(vis_outdir)
 
     # test_measurement(dpf, test_loader, args.visualize, args.vis_outdir)
-    # test_motion_model(val_loader, motion_model, args.vis_outdir, stds, means, state_step_sizes)
+    # test_motion_model(test_loader, motion_model, args.vis_outdir, stds, means, state_step_sizes)
     test_connect_model(dpf, test_loader, args.visualize, args.vis_outdir)
 
 
